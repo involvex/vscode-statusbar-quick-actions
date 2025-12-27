@@ -11,8 +11,16 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import { minimatch } from "minimatch";
+import { DebouncedVisibilityChecker } from "./utils/debounce";
 
 export class VisibilityManager {
+  private debouncedChecker: DebouncedVisibilityChecker;
+  private visibilityCache: Map<string, boolean>;
+
+  constructor(defaultDebounceMs = 300) {
+    this.debouncedChecker = new DebouncedVisibilityChecker(defaultDebounceMs);
+    this.visibilityCache = new Map();
+  }
   /**
    * Check if a button should be visible based on current context
    */
@@ -185,10 +193,69 @@ export class VisibilityManager {
   }
 
   /**
+   * Check visibility with debouncing
+   */
+  public checkVisibilityDebounced(
+    buttonId: string,
+    buttonConfig: VisibilityConfig,
+    customDebounce?: number,
+    callback?: (isVisible: boolean) => void,
+  ): void {
+    const checkFn = () => {
+      const context = this.getCurrentContext();
+      const isVisible = this.isVisible(buttonConfig, context);
+      this.visibilityCache.set(buttonId, isVisible);
+      if (callback) {
+        callback(isVisible);
+      }
+    };
+
+    // Use per-button custom debounce if specified, otherwise use global default
+    const delay = customDebounce ?? buttonConfig.debounceMs;
+
+    const debouncedCheck = this.debouncedChecker.getDebouncedCheck(
+      buttonId,
+      checkFn,
+      delay,
+    );
+
+    debouncedCheck();
+  }
+
+  /**
+   * Get cached visibility result for a button
+   */
+  public getCachedVisibility(buttonId: string): boolean | undefined {
+    return this.visibilityCache.get(buttonId);
+  }
+
+  /**
+   * Clear cached visibility for a button
+   */
+  public clearCachedVisibility(buttonId: string): void {
+    this.visibilityCache.delete(buttonId);
+  }
+
+  /**
+   * Clear all cached visibility results
+   */
+  public clearAllCachedVisibility(): void {
+    this.visibilityCache.clear();
+  }
+
+  /**
    * Update visibility when editor changes
    */
   public onEditorChanged(): void {
     // This would trigger re-evaluation of button visibility
     // Implementation would depend on how the main extension handles this
+  }
+
+  /**
+   * Dispose of resources
+   */
+  public dispose(): void {
+    this.debouncedChecker.dispose();
+    this.visibilityCache.clear();
   }
 }

@@ -17,6 +17,9 @@ export interface ButtonCommand {
     | "github"
     | "vscode"
     | "task"
+    | "bunx"
+    | "npx"
+    | "pnpx"
     | "detect";
   script?: string;
   command?: string;
@@ -29,6 +32,9 @@ export interface ButtonCommand {
 export interface IconConfig {
   id: string;
   animation?: "spin" | "pulse" | null;
+  library?: "vscode" | "material";
+  variant?: "outlined" | "filled" | "rounded" | "sharp" | "two-tone";
+  size?: "small" | "medium" | "large";
 }
 
 /**
@@ -70,6 +76,7 @@ export interface VisibilityCondition {
  */
 export interface VisibilityConfig {
   conditions: VisibilityCondition[];
+  debounceMs?: number;
 }
 
 /**
@@ -78,6 +85,28 @@ export interface VisibilityConfig {
 export interface HistoryConfig {
   enabled?: boolean;
   maxEntries?: number;
+}
+
+/**
+ * Output panel configuration
+ */
+export interface OutputPanelConfig {
+  enabled: boolean;
+  mode: "per-button" | "shared";
+  format: "raw" | "formatted" | "ansi";
+  clearOnRun: boolean;
+  showTimestamps: boolean;
+  preserveHistory: boolean;
+  maxLines: number;
+}
+
+/**
+ * Performance configuration
+ */
+export interface PerformanceConfig {
+  visibilityDebounceMs: number;
+  enableVirtualization: boolean;
+  cacheResults: boolean;
 }
 
 /**
@@ -173,6 +202,13 @@ export interface ExtensionConfig {
       keyboardNavigation?: boolean;
       highContrast?: boolean;
     };
+    output?: OutputPanelConfig;
+    performance?: PerformanceConfig;
+    icons?: {
+      library: "vscode" | "material";
+      defaultVariant: string;
+      defaultSize: string;
+    };
   };
 }
 
@@ -205,6 +241,12 @@ export interface ExecutionOptions {
   workingDirectory?: string;
   environment?: Record<string, string>;
   timeout?: number;
+  streaming?: {
+    enabled: boolean;
+    onStdout?: (data: string) => void;
+    onStderr?: (data: string) => void;
+    onProgress?: (percent: number) => void;
+  };
 }
 
 /**
@@ -248,6 +290,27 @@ export interface ValidationResult {
   isValid: boolean;
   errors: string[];
   warnings: string[];
+}
+
+/**
+ * Menu category for nested settings
+ */
+export interface MenuCategory {
+  id: string;
+  label: string;
+  icon: string;
+  description: string;
+  items: MenuCategoryItem[];
+}
+
+/**
+ * Menu category item
+ */
+export interface MenuCategoryItem {
+  id: string;
+  label: string;
+  description?: string;
+  action: () => Promise<void>;
 }
 
 /**

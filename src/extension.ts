@@ -15,6 +15,9 @@ import {
 import { ConfigManager } from "./configuration";
 import { CommandExecutor } from "./executor";
 import { ThemeManager } from "./theme";
+import { VisibilityManager } from "./visibility";
+import { MaterialIconManager } from "./material-icons";
+import { OutputPanelManager } from "./output-panel";
 
 /**
  * Main extension class
@@ -24,11 +27,15 @@ export class StatusBarQuickActionsExtension {
   private configManager: ConfigManager;
   private commandExecutor: CommandExecutor;
   private themeManager: ThemeManager;
+  private visibilityManager!: VisibilityManager;
+  private materialIconManager!: MaterialIconManager;
+  private outputPanelManager!: OutputPanelManager;
   private buttonStates: Map<string, ButtonState> = new Map<
     string,
     ButtonState
   >();
   private disposables: vscode.Disposable[] = [];
+  private editorChangeListener: vscode.Disposable | null = null;
   private isActivated = false;
 
   constructor(context: vscode.ExtensionContext) {
@@ -90,6 +97,14 @@ export class StatusBarQuickActionsExtension {
     this.disposables.forEach((disposable) => disposable.dispose());
     this.buttonStates.clear();
 
+    // Dispose new managers
+    if (this.outputPanelManager) {
+      this.outputPanelManager.dispose();
+    }
+    if (this.visibilityManager) {
+      this.visibilityManager.dispose();
+    }
+
     this.isActivated = false;
     console.log("StatusBar Quick Actions extension deactivated");
   }
@@ -100,6 +115,28 @@ export class StatusBarQuickActionsExtension {
   private async initializeManagers(): Promise<void> {
     this.configManager.initialize(this.context);
     await this.themeManager.initialize(this.context);
+
+    // Initialize Material Icons Manager
+    this.materialIconManager = new MaterialIconManager();
+
+    // Initialize Output Panel Manager with config
+    const outputConfig = this.configManager.getConfigValue(
+      "settings.output",
+      this.getDefaultOutputConfig(),
+    );
+    this.outputPanelManager = new OutputPanelManager(outputConfig);
+
+    // Initialize Visibility Manager with debounce config
+    const performanceConfig = this.configManager.getConfigValue(
+      "settings.performance",
+      this.getDefaultPerformanceConfig(),
+    );
+    this.visibilityManager = new VisibilityManager(
+      performanceConfig.visibilityDebounceMs,
+    );
+
+    // Setup editor change listener for debounced visibility checks
+    this.setupEditorChangeListener();
   }
 
   /**
@@ -251,12 +288,17 @@ export class StatusBarQuickActionsExtension {
    */
   private getButtonDisplayText(buttonConfig: StatusBarButtonConfig): string {
     if (buttonConfig.icon) {
+      // Resolve Material icons to Codicons if needed
+      const resolvedIconId = this.materialIconManager.resolveIcon(
+        buttonConfig.icon,
+      );
+
       const iconPrefix =
         buttonConfig.icon.animation === "spin"
-          ? "$(sync~spin)"
+          ? `$(${resolvedIconId}~spin)`
           : buttonConfig.icon.animation === "pulse"
-            ? "$(sync~pulse)"
-            : `${buttonConfig.icon.id}`;
+            ? `$(${resolvedIconId}~pulse)`
+            : `$(${resolvedIconId})`;
       return iconPrefix;
     }
     return buttonConfig.text;
@@ -291,6 +333,29 @@ export class StatusBarQuickActionsExtension {
 
       if (config.execution?.timeout) {
         executionOptions.timeout = config.execution.timeout;
+      }
+
+      // Add streaming support if output panel is enabled
+      const outputConfig = this.outputPanelManager.getConfig();
+      if (outputConfig.enabled) {
+        // Ensure panel exists
+        this.outputPanelManager.getOrCreatePanel(buttonId, config.text);
+
+        if (outputConfig.clearOnRun) {
+          this.outputPanelManager.clearPanel(buttonId);
+        }
+
+        executionOptions.streaming = {
+          enabled: true,
+          onStdout: (data) => {
+            this.outputPanelManager.appendOutput(buttonId, data, "stdout");
+          },
+          onStderr: (data) => {
+            this.outputPanelManager.appendOutput(buttonId, data, "stderr");
+          },
+        };
+
+        this.outputPanelManager.showPanel(buttonId, true);
       }
 
       // Execute the command
@@ -577,6 +642,9 @@ export class StatusBarQuickActionsExtension {
       { label: "vscode", description: "Run VS Code command" },
       { label: "task", description: "Run VS Code task" },
       { label: "github", description: "Run GitHub CLI command" },
+      { label: "npx", description: "Run npx command" },
+      { label: "pnpx", description: "Run pnpx command" },
+      { label: "bunx", description: "Run bunx command" },
       { label: "detect", description: "Auto-detect package manager" },
     ];
 
@@ -595,6 +663,9 @@ export class StatusBarQuickActionsExtension {
         commandType.label === "yarn" ||
         commandType.label === "pnpm" ||
         commandType.label === "bun" ||
+        commandType.label === "npx" ||
+        commandType.label === "pnpx" ||
+        commandType.label === "bunx" ||
         commandType.label === "detect"
           ? "Enter script name"
           : "Enter command",
@@ -621,19 +692,36 @@ export class StatusBarQuickActionsExtension {
           | "yarn"
           | "pnpm"
           | "bun"
+          | "npx"
+          | "pnpx"
+          | "bunx"
           | "shell"
           | "github"
           | "vscode"
           | "task"
           | "detect",
-        script: ["npm", "yarn", "pnpm", "bun", "detect"].includes(
-          commandType.label,
-        )
+        script: [
+          "npm",
+          "yarn",
+          "pnpm",
+          "bun",
+          "bunx",
+          "npx",
+          "pnpx",
+          "detect",
+        ].includes(commandType.label)
           ? command
           : undefined,
-        command: !["npm", "yarn", "pnpm", "bun", "detect"].includes(
-          commandType.label,
-        )
+        command: ![
+          "npm",
+          "yarn",
+          "pnpm",
+          "bun",
+          "bunx",
+          "npx",
+          "pnpx",
+          "detect",
+        ].includes(commandType.label)
           ? command
           : undefined,
       },
@@ -1038,6 +1126,64 @@ export class StatusBarQuickActionsExtension {
           }
         });
     }
+  }
+
+  /**
+   * Get default output panel configuration
+   */
+  private getDefaultOutputConfig() {
+    return {
+      enabled: true,
+      mode: "per-button" as const,
+      format: "formatted" as const,
+      clearOnRun: false,
+      showTimestamps: true,
+      preserveHistory: true,
+      maxLines: 1000,
+    };
+  }
+
+  /**
+   * Get default performance configuration
+   */
+  private getDefaultPerformanceConfig() {
+    return {
+      visibilityDebounceMs: 300,
+      enableVirtualization: false,
+      cacheResults: true,
+    };
+  }
+
+  /**
+   * Setup editor change listener for debounced visibility checks
+   */
+  private setupEditorChangeListener(): void {
+    this.editorChangeListener = vscode.window.onDidChangeActiveTextEditor(
+      () => {
+        // Debounced visibility check for all buttons
+        this.buttonStates.forEach((buttonState, buttonId) => {
+          if (buttonState.config.visibility) {
+            const customDebounce = buttonState.config.visibility.debounceMs;
+
+            this.visibilityManager.checkVisibilityDebounced(
+              buttonId,
+              buttonState.config.visibility,
+              customDebounce,
+              (isVisible) => {
+                // Update button visibility
+                if (isVisible) {
+                  buttonState.item.show();
+                } else {
+                  buttonState.item.hide();
+                }
+              },
+            );
+          }
+        });
+      },
+    );
+
+    this.disposables.push(this.editorChangeListener);
   }
 }
 

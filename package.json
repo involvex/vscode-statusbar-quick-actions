@@ -2,7 +2,7 @@
   "name": "statusbar-quick-actions",
   "displayName": "StatusBar Quick Actions",
   "description": "Highly customizable statusbar buttons for executing user-defined scripts and commands with advanced features including theme support, execution tracking, and intelligent visibility conditions.",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "publisher": "involvex",
   "author": {
     "name": "involvex"
@@ -11,12 +11,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/statusbar-quick-actions.git"
+    "url": "https://github.com/involvex/vscode-statusbar-quick-actions.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/statusbar-quick-actions/issues"
+    "url": "https://github.com/involvex/vscode-statusbar-quick-actions/issues"
   },
-  "homepage": "https://github.com/your-username/statusbar-quick-actions#readme",
+  "homepage": "https://github.com/involvex/vscode-statusbar-quick-actions#readme",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -128,6 +128,9 @@
                       "yarn",
                       "pnpm",
                       "bun",
+                      "bunx",
+                      "npx",
+                      "pnpx",
                       "shell",
                       "github",
                       "vscode",
@@ -396,6 +399,114 @@
           "type": "boolean",
           "default": false,
           "description": "Enable debug logging for troubleshooting"
+        },
+        "statusbarQuickActions.settings.output": {
+          "type": "object",
+          "description": "Output panel configuration for command execution",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable dedicated output panel for command execution"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "per-button",
+                "shared"
+              ],
+              "default": "per-button",
+              "description": "Output panel mode: per-button (separate panel for each button) or shared (one panel for all)"
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "raw",
+                "formatted",
+                "ansi"
+              ],
+              "default": "formatted",
+              "description": "Output formatting: raw (plain text), formatted (with timestamps), ansi (preserve colors)"
+            },
+            "clearOnRun": {
+              "type": "boolean",
+              "default": false,
+              "description": "Clear output panel before each command execution"
+            },
+            "showTimestamps": {
+              "type": "boolean",
+              "default": true,
+              "description": "Show timestamps in output panel"
+            },
+            "preserveHistory": {
+              "type": "boolean",
+              "default": true,
+              "description": "Preserve output history across command runs"
+            },
+            "maxLines": {
+              "type": "number",
+              "default": 1000,
+              "description": "Maximum number of lines to keep in output panel"
+            }
+          }
+        },
+        "statusbarQuickActions.settings.performance": {
+          "type": "object",
+          "description": "Performance optimization settings",
+          "properties": {
+            "visibilityDebounceMs": {
+              "type": "number",
+              "default": 300,
+              "description": "Debounce delay for visibility checks in milliseconds (reduces CPU usage on rapid file switching)"
+            },
+            "enableVirtualization": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable virtualization for large button lists (experimental)"
+            },
+            "cacheResults": {
+              "type": "boolean",
+              "default": true,
+              "description": "Cache visibility evaluation results for better performance"
+            }
+          }
+        },
+        "statusbarQuickActions.settings.icons": {
+          "type": "object",
+          "description": "Icon configuration for status bar buttons",
+          "properties": {
+            "library": {
+              "type": "string",
+              "enum": [
+                "vscode",
+                "material"
+              ],
+              "default": "vscode",
+              "description": "Icon library: VSCode Codicons or Material Design Icons"
+            },
+            "defaultVariant": {
+              "type": "string",
+              "enum": [
+                "outlined",
+                "filled",
+                "rounded",
+                "sharp",
+                "two-tone"
+              ],
+              "default": "outlined",
+              "description": "Default Material Design Icon variant (only applies when library is 'material')"
+            },
+            "defaultSize": {
+              "type": "string",
+              "enum": [
+                "small",
+                "medium",
+                "large"
+              ],
+              "default": "medium",
+              "description": "Default icon size"
+            }
+          }
         }
       }
     }
@@ -408,6 +519,7 @@
     "lint:fix": "bun run eslint --fix .",
     "format": "bun run prettier --write .",
     "format:check": "bun run prettier --check .",
+    "typecheck": "bun run tsc --noEmit",
     "watch": "bun run compile:watch",
     "clean": "rmdir --force out dist",
     "rebuild": "bun run clean && bun run compile",

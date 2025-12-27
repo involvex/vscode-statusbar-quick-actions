@@ -4,7 +4,7 @@
 
 import { ExecutionResult, ExecutionOptions, ButtonCommand } from "./types";
 import * as vscode from "vscode";
-import { exec } from "child_process";
+import { exec, spawn } from "child_process";
 import { promisify } from "util";
 import * as path from "path";
 import * as fs from "fs";
@@ -19,6 +19,12 @@ export class CommandExecutor {
     command: ButtonCommand,
     options: ExecutionOptions,
   ): Promise<ExecutionResult> {
+    // If streaming is enabled, use executeWithStreaming
+    if (options.streaming?.enabled) {
+      return this.executeWithStreaming(command, options);
+    }
+
+    // Otherwise, use existing execAsync logic for backward compatibility
     const startTime = Date.now();
     const timeout = options.timeout || 30000;
 
@@ -47,6 +53,21 @@ export class CommandExecutor {
         case "bun":
           cmd = "bun";
           args = ["run", command.script || ""];
+          fullCommand = `${cmd} ${args.join(" ")}`;
+          break;
+        case "bunx":
+          cmd = "bunx";
+          args = [command.script || ""].concat(command.args || []);
+          fullCommand = `${cmd} ${args.join(" ")}`;
+          break;
+        case "npx":
+          cmd = "npx";
+          args = [command.script || ""].concat(command.args || []);
+          fullCommand = `${cmd} ${args.join(" ")}`;
+          break;
+        case "pnpx":
+          cmd = "pnpx";
+          args = [command.script || ""].concat(command.args || []);
           fullCommand = `${cmd} ${args.join(" ")}`;
           break;
         case "github":
@@ -163,6 +184,146 @@ export class CommandExecutor {
         command: command.command || "",
       };
     }
+  }
+
+  /**
+   * Build command string and arguments from ButtonCommand
+   */
+  private buildCommand(command: ButtonCommand): {
+    cmd: string;
+    args: string[];
+    fullCommand: string;
+  } {
+    let cmd: string;
+    let args: string[] = [];
+    let fullCommand: string;
+
+    switch (command.type) {
+      case "npm":
+        cmd = "npm";
+        args = ["run", command.script || ""];
+        fullCommand = `${cmd} ${args.join(" ")}`;
+        break;
+      case "yarn":
+        cmd = "yarn";
+        args = [command.script || ""];
+        fullCommand = `${cmd} ${args.join(" ")}`;
+        break;
+      case "pnpm":
+        cmd = "pnpm";
+        args = ["run", command.script || ""];
+        fullCommand = `${cmd} ${args.join(" ")}`;
+        break;
+      case "bun":
+        cmd = "bun";
+        args = ["run", command.script || ""];
+        fullCommand = `${cmd} ${args.join(" ")}`;
+        break;
+      case "bunx":
+        cmd = "bunx";
+        args = [command.script || ""].concat(command.args || []);
+        fullCommand = `${cmd} ${args.join(" ")}`;
+        break;
+      case "npx":
+        cmd = "npx";
+        args = [command.script || ""].concat(command.args || []);
+        fullCommand = `${cmd} ${args.join(" ")}`;
+        break;
+      case "pnpx":
+        cmd = "pnpx";
+        args = [command.script || ""].concat(command.args || []);
+        fullCommand = `${cmd} ${args.join(" ")}`;
+        break;
+      case "github":
+        cmd = "gh";
+        args = [command.command || ""].concat(command.args || []);
+        fullCommand = `${cmd} ${args.join(" ")}`;
+        break;
+      case "shell":
+      default:
+        cmd = command.command || "";
+        args = command.args || [];
+        fullCommand = args.length > 0 ? `${cmd} ${args.join(" ")}` : cmd;
+        break;
+    }
+
+    return { cmd, args, fullCommand };
+  }
+
+  /**
+   * Execute a command with streaming output support
+   */
+  public async executeWithStreaming(
+    command: ButtonCommand,
+    options: ExecutionOptions,
+  ): Promise<ExecutionResult> {
+    const startTime = Date.now();
+
+    // Build command
+    const { cmd, args, fullCommand } = this.buildCommand(command);
+
+    const cwd =
+      options.workingDirectory ||
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ||
+      process.cwd();
+    const env = { ...process.env, ...options.environment };
+
+    return new Promise((resolve, reject) => {
+      const child = spawn(cmd, args, {
+        cwd,
+        env,
+        shell: true,
+        windowsHide: true,
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      // Handle stdout data
+      child.stdout?.on("data", (data) => {
+        const text = data.toString();
+        stdout += text;
+        if (options.streaming?.onStdout) {
+          options.streaming.onStdout(text);
+        }
+      });
+
+      // Handle stderr data
+      child.stderr?.on("data", (data) => {
+        const text = data.toString();
+        stderr += text;
+        if (options.streaming?.onStderr) {
+          options.streaming.onStderr(text);
+        }
+      });
+
+      // Handle process exit
+      child.on("close", (code) => {
+        resolve({
+          code: code || 0,
+          stdout: stdout.trim(),
+          stderr: stderr.trim(),
+          duration: Date.now() - startTime,
+          timestamp: new Date(),
+          command: fullCommand,
+        });
+      });
+
+      // Handle errors
+      child.on("error", (error) => {
+        reject(error);
+      });
+
+      // Timeout handling
+      if (options.timeout) {
+        setTimeout(() => {
+          child.kill();
+          reject(
+            new Error(`Command execution timeout after ${options.timeout}ms`),
+          );
+        }, options.timeout);
+      }
+    });
   }
 
   /**
