@@ -225,6 +225,10 @@ export class ConfigManager {
             ].includes(button.command.type) &&
             !button.command.script
           ) {
+            console.log(
+              `Button ${index}: ${button.command.type} command missing script`,
+              button.command,
+            );
             errors.push(
               `Button ${index}: Script is required for ${button.command.type} commands`,
             );
@@ -236,6 +240,10 @@ export class ConfigManager {
             ) &&
             !button.command.command
           ) {
+            console.log(
+              `Button ${index}: ${button.command.type} command missing command string`,
+              button.command,
+            );
             errors.push(
               `Button ${index}: Command string is required for ${button.command.type} commands`,
             );

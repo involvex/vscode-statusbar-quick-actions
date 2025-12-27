@@ -2,7 +2,7 @@
   "name": "statusbar-quick-actions",
   "displayName": "StatusBar Quick Actions",
   "description": "Highly customizable statusbar buttons for executing user-defined scripts and commands with advanced features including theme support, execution tracking, and intelligent visibility conditions.",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "publisher": "involvex",
   "author": {
     "name": "involvex"
@@ -521,7 +521,7 @@
     "format:check": "bun run prettier --check .",
     "typecheck": "bun run tsc --noEmit",
     "watch": "bun run compile:watch",
-    "clean": "rmdir --force out dist  && mkdir dist",
+    "clean": "rimraf out dist  && mkdir dist",
     "rebuild": "bun run clean && bun run compile",
     "dev": "bun run clean && bun run watch",
     "prepack": "bun run format && bun run lint:fix && bun run typecheck && bun run compile",
@@ -544,7 +544,7 @@
   },
   "dependencies": {
     "@involvex/rmdir-cli": "^2.0.10",
-    "minimatch": "^10.1.1"
+    "rimraf": "^6.1.2"
   },
   "extensionDependencies": [],
   "badges": [

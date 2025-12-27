@@ -228,6 +228,16 @@ export class StatusBarQuickActionsExtension {
    * Update configuration and recreate statusbar items
    */
   private async updateConfiguration(config: ExtensionConfig): Promise<void> {
+    console.log("Updating configuration with buttons:", config.buttons.length);
+
+    // Debug: Log each button configuration
+    config.buttons.forEach((button, index) => {
+      console.log(
+        `Button ${index}: ${button.id} - ${button.text || "no text"}`,
+        button,
+      );
+    });
+
     // Validate configuration first
     const validation = this.configManager.validateConfig(config);
     if (!validation.isValid) {
@@ -256,21 +266,26 @@ export class StatusBarQuickActionsExtension {
     // Create new statusbar items (even if validation failed, try to create valid ones)
     let createdCount = 0;
     let failedCount = 0;
+    let disabledCount = 0;
 
     for (const buttonConfig of config.buttons) {
-      if (buttonConfig.enabled) {
-        const created = await this.createStatusBarItem(buttonConfig);
-        if (created) {
-          createdCount++;
-        } else {
-          failedCount++;
-        }
+      if (buttonConfig.enabled === false) {
+        console.log(`Button ${buttonConfig.id} is disabled, skipping creation`);
+        disabledCount++;
+        continue;
+      }
+
+      const created = await this.createStatusBarItem(buttonConfig);
+      if (created) {
+        createdCount++;
+      } else {
+        failedCount++;
       }
     }
 
     // Log summary
     console.log(
-      `StatusBar Quick Actions: Created ${createdCount} buttons, ${failedCount} failed`,
+      `StatusBar Quick Actions: Created ${createdCount} buttons, ${failedCount} failed, ${disabledCount} disabled`,
     );
 
     // Show notification if no buttons were created
@@ -289,14 +304,19 @@ export class StatusBarQuickActionsExtension {
     buttonConfig: StatusBarButtonConfig,
   ): Promise<boolean> {
     try {
+      console.log(`Creating status bar item for button: ${buttonConfig.id}`);
+
       // Validate button configuration
       if (!buttonConfig.id) {
+        console.error(`Button ${buttonConfig.id || "unknown"} missing ID`);
         throw new Error("Button ID is required");
       }
       if (!buttonConfig.text && !buttonConfig.icon) {
+        console.error(`Button ${buttonConfig.id} missing both text and icon`);
         throw new Error("Either button text or icon is required");
       }
       if (!buttonConfig.command) {
+        console.error(`Button ${buttonConfig.id} missing command`);
         throw new Error("Button command is required");
       }
 
@@ -311,16 +331,24 @@ export class StatusBarQuickActionsExtension {
         alignment,
         priority,
       );
+      console.log(
+        `Created status bar item for button ${buttonConfig.id} with alignment ${alignment} and priority ${priority}`,
+      );
 
       // Set button properties
       const displayText = this.getButtonDisplayText(buttonConfig);
+      console.log(`Button ${buttonConfig.id} display text: "${displayText}"`);
       if (!displayText || displayText.trim() === "") {
+        console.error(`Button ${buttonConfig.id} has empty display text`);
         throw new Error("Button display text cannot be empty");
       }
       statusBarItem.text = displayText;
       statusBarItem.tooltip =
         buttonConfig.tooltip || buttonConfig.text || "Quick Action";
       statusBarItem.command = `statusbarQuickActions.execute_${buttonConfig.id}`;
+      console.log(
+        `Button ${buttonConfig.id} command: ${statusBarItem.command}`,
+      );
 
       // Apply theme colors
       this.themeManager.applyThemeToStatusBarItem(statusBarItem);
@@ -357,6 +385,7 @@ export class StatusBarQuickActionsExtension {
       this.disposables.push(statusBarItem);
       statusBarItem.show();
 
+      console.log(`Button ${buttonConfig.id} shown successfully`);
       console.log(
         `Successfully created button: ${buttonConfig.id} (${buttonConfig.text})`,
       );

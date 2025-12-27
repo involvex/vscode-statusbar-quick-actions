@@ -10,7 +10,6 @@ import {
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
-import { minimatch } from "minimatch";
 import { DebouncedVisibilityChecker } from "./utils/debounce";
 
 export class VisibilityManager {
@@ -95,7 +94,7 @@ export class VisibilityManager {
     return condition.patterns.some((pattern: string) => {
       // Check if pattern is a glob pattern
       if (pattern.includes("*") || pattern.includes("?")) {
-        return minimatch(fileName, pattern, { matchBase: true });
+        return this.simpleGlobMatch(fileName, pattern);
       }
       // Check if pattern is an extension
       else if (pattern.startsWith(".")) {
@@ -227,6 +226,29 @@ export class VisibilityManager {
    */
   public getCachedVisibility(buttonId: string): boolean | undefined {
     return this.visibilityCache.get(buttonId);
+  }
+
+  /**
+   * Simple glob pattern matching (replaces minimatch for basic patterns)
+   */
+  private simpleGlobMatch(text: string, pattern: string): boolean {
+    // Convert glob pattern to regex
+    let regexPattern = pattern
+      .replace(/\./g, "\\.") // Escape dots
+      .replace(/\*/g, ".*") // Replace * with .*
+      .replace(/\?/g, ".") // Replace ? with .
+      .replace(/\+\//g, ".*\\/"); // Handle path separators
+
+    // Ensure full string match
+    regexPattern = `^${regexPattern}$`;
+
+    try {
+      const regex = new RegExp(regexPattern, "i"); // Case insensitive
+      return regex.test(text);
+    } catch (error) {
+      console.warn(`Invalid glob pattern: ${pattern}`, error);
+      return false;
+    }
   }
 
   /**
