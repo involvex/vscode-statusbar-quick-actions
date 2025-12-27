@@ -242,7 +242,12 @@ export class OutputPanelManager {
     // Note: VSCode OutputChannel doesn't provide direct line count access
     // This is a placeholder for future optimization if needed
     // The history tracking serves as a workaround for now
-    return this.trimPanelIfNeeded(buttonId);
+
+    // Check if history exceeds max lines and trim if needed
+    const history = this.outputHistory.get(buttonId);
+    if (history && history.length > this.config.maxLines) {
+      history.splice(0, history.length - this.config.maxLines);
+    }
   }
 
   /**

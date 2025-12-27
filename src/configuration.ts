@@ -202,10 +202,44 @@ export class ConfigManager {
         if (!button.text && !button.icon) {
           errors.push(`Button ${index}: Either text or icon is required`);
         }
-        if (!button.command || typeof button.command !== "string") {
+        if (!button.command || typeof button.command !== "object") {
           errors.push(
-            `Button ${index}: Command is required and must be a string`,
+            `Button ${index}: Command is required and must be an object`,
           );
+        } else {
+          // Validate command structure
+          if (!button.command.type) {
+            errors.push(`Button ${index}: Command type is required`);
+          }
+          // Validate that package manager commands have a script
+          if (
+            [
+              "npm",
+              "yarn",
+              "pnpm",
+              "bun",
+              "bunx",
+              "npx",
+              "pnpx",
+              "detect",
+            ].includes(button.command.type) &&
+            !button.command.script
+          ) {
+            errors.push(
+              `Button ${index}: Script is required for ${button.command.type} commands`,
+            );
+          }
+          // Validate that non-package manager commands have a command string
+          if (
+            ["shell", "github", "vscode", "task"].includes(
+              button.command.type,
+            ) &&
+            !button.command.command
+          ) {
+            errors.push(
+              `Button ${index}: Command string is required for ${button.command.type} commands`,
+            );
+          }
         }
       });
     }

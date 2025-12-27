@@ -113,30 +113,49 @@ export class StatusBarQuickActionsExtension {
    * Initialize all managers
    */
   private async initializeManagers(): Promise<void> {
-    this.configManager.initialize(this.context);
-    await this.themeManager.initialize(this.context);
+    try {
+      // Initialize configuration manager
+      this.configManager.initialize(this.context);
+      console.log("ConfigManager initialized successfully");
 
-    // Initialize Material Icons Manager
-    this.materialIconManager = new MaterialIconManager();
+      // Initialize theme manager
+      await this.themeManager.initialize(this.context);
+      console.log("ThemeManager initialized successfully");
 
-    // Initialize Output Panel Manager with config
-    const outputConfig = this.configManager.getConfigValue(
-      "settings.output",
-      this.getDefaultOutputConfig(),
-    );
-    this.outputPanelManager = new OutputPanelManager(outputConfig);
+      // Initialize Material Icons Manager
+      this.materialIconManager = new MaterialIconManager();
+      console.log("MaterialIconManager initialized successfully");
 
-    // Initialize Visibility Manager with debounce config
-    const performanceConfig = this.configManager.getConfigValue(
-      "settings.performance",
-      this.getDefaultPerformanceConfig(),
-    );
-    this.visibilityManager = new VisibilityManager(
-      performanceConfig.visibilityDebounceMs,
-    );
+      // Initialize Output Panel Manager with config
+      const outputConfig = this.configManager.getConfigValue(
+        "settings.output",
+        this.getDefaultOutputConfig(),
+      );
+      this.outputPanelManager = new OutputPanelManager(outputConfig);
+      console.log("OutputPanelManager initialized successfully");
 
-    // Setup editor change listener for debounced visibility checks
-    this.setupEditorChangeListener();
+      // Initialize Visibility Manager with debounce config
+      const performanceConfig = this.configManager.getConfigValue(
+        "settings.performance",
+        this.getDefaultPerformanceConfig(),
+      );
+      this.visibilityManager = new VisibilityManager(
+        performanceConfig.visibilityDebounceMs,
+      );
+      console.log("VisibilityManager initialized successfully");
+
+      // Setup editor change listener for debounced visibility checks
+      this.setupEditorChangeListener();
+      console.log("Editor change listener setup successfully");
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error("Failed to initialize managers:", errorMessage);
+      vscode.window.showErrorMessage(
+        `StatusBar Quick Actions: Failed to initialize - ${errorMessage}`,
+      );
+      throw error; // Re-throw to prevent activation from completing
+    }
   }
 
   /**
@@ -209,27 +228,78 @@ export class StatusBarQuickActionsExtension {
    * Update configuration and recreate statusbar items
    */
   private async updateConfiguration(config: ExtensionConfig): Promise<void> {
+    // Validate configuration first
+    const validation = this.configManager.validateConfig(config);
+    if (!validation.isValid) {
+      const errorMessage = `Invalid button configuration:\n${validation.errors.join("\n")}`;
+      console.error(errorMessage);
+      vscode.window.showErrorMessage(
+        `StatusBar Quick Actions: Configuration validation failed. Check console for details.`,
+      );
+      // Show detailed error in output channel
+      const outputChannel = vscode.window.createOutputChannel(
+        "StatusBar Quick Actions - Errors",
+      );
+      outputChannel.appendLine("Configuration Validation Errors:");
+      validation.errors.forEach((error) =>
+        outputChannel.appendLine(`  - ${error}`),
+      );
+      outputChannel.show(true);
+    }
+
     // Remove existing statusbar items
     this.buttonStates.forEach((state) => {
       state.item.dispose();
     });
     this.buttonStates.clear();
 
-    // Create new statusbar items
+    // Create new statusbar items (even if validation failed, try to create valid ones)
+    let createdCount = 0;
+    let failedCount = 0;
+
     for (const buttonConfig of config.buttons) {
       if (buttonConfig.enabled) {
-        await this.createStatusBarItem(buttonConfig);
+        const created = await this.createStatusBarItem(buttonConfig);
+        if (created) {
+          createdCount++;
+        } else {
+          failedCount++;
+        }
       }
+    }
+
+    // Log summary
+    console.log(
+      `StatusBar Quick Actions: Created ${createdCount} buttons, ${failedCount} failed`,
+    );
+
+    // Show notification if no buttons were created
+    if (createdCount === 0 && config.buttons.length > 0) {
+      vscode.window.showWarningMessage(
+        `StatusBar Quick Actions: No buttons could be created. Check the output panel for errors.`,
+      );
     }
   }
 
   /**
    * Create a statusbar item for a button configuration
+   * @returns true if button was created successfully, false otherwise
    */
   private async createStatusBarItem(
     buttonConfig: StatusBarButtonConfig,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
+      // Validate button configuration
+      if (!buttonConfig.id) {
+        throw new Error("Button ID is required");
+      }
+      if (!buttonConfig.text && !buttonConfig.icon) {
+        throw new Error("Either button text or icon is required");
+      }
+      if (!buttonConfig.command) {
+        throw new Error("Button command is required");
+      }
+
       // Create statusbar item
       const alignment =
         buttonConfig.alignment === "left"
@@ -243,8 +313,13 @@ export class StatusBarQuickActionsExtension {
       );
 
       // Set button properties
-      statusBarItem.text = this.getButtonDisplayText(buttonConfig);
-      statusBarItem.tooltip = buttonConfig.tooltip || buttonConfig.text;
+      const displayText = this.getButtonDisplayText(buttonConfig);
+      if (!displayText || displayText.trim() === "") {
+        throw new Error("Button display text cannot be empty");
+      }
+      statusBarItem.text = displayText;
+      statusBarItem.tooltip =
+        buttonConfig.tooltip || buttonConfig.text || "Quick Action";
       statusBarItem.command = `statusbarQuickActions.execute_${buttonConfig.id}`;
 
       // Apply theme colors
@@ -252,7 +327,10 @@ export class StatusBarQuickActionsExtension {
 
       // Set accessibility properties
       statusBarItem.accessibilityInformation = {
-        label: buttonConfig.tooltip || buttonConfig.text,
+        label:
+          buttonConfig.tooltip ||
+          buttonConfig.text ||
+          `Button ${buttonConfig.id}`,
         role: "button",
       };
 
@@ -267,7 +345,10 @@ export class StatusBarQuickActionsExtension {
         history: history,
         accessibility: {
           role: "button",
-          ariaLabel: buttonConfig.tooltip || buttonConfig.text,
+          ariaLabel:
+            buttonConfig.tooltip ||
+            buttonConfig.text ||
+            `Button ${buttonConfig.id}`,
           focusOrder: priority,
         },
       };
@@ -275,11 +356,22 @@ export class StatusBarQuickActionsExtension {
       this.buttonStates.set(buttonConfig.id, buttonState);
       this.disposables.push(statusBarItem);
       statusBarItem.show();
+
+      console.log(
+        `Successfully created button: ${buttonConfig.id} (${buttonConfig.text})`,
+      );
+      return true;
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       console.error(
         `Failed to create statusbar item for button ${buttonConfig.id}:`,
-        error,
+        errorMessage,
       );
+      vscode.window.showErrorMessage(
+        `Failed to create button "${buttonConfig.text || buttonConfig.id}": ${errorMessage}`,
+      );
+      return false;
     }
   }
 

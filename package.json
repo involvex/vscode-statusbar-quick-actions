@@ -2,7 +2,7 @@
   "name": "statusbar-quick-actions",
   "displayName": "StatusBar Quick Actions",
   "description": "Highly customizable statusbar buttons for executing user-defined scripts and commands with advanced features including theme support, execution tracking, and intelligent visibility conditions.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "involvex",
   "author": {
     "name": "involvex"
@@ -521,10 +521,10 @@
     "format:check": "bun run prettier --check .",
     "typecheck": "bun run tsc --noEmit",
     "watch": "bun run compile:watch",
-    "clean": "rmdir --force out dist",
+    "clean": "rmdir --force out dist  && mkdir dist",
     "rebuild": "bun run clean && bun run compile",
     "dev": "bun run clean && bun run watch",
-    "prepack": "bun run format && bun run lint:fix && bun run typecheck && bun run compile && mkdir dist",
+    "prepack": "bun run format && bun run lint:fix && bun run typecheck && bun run compile",
     "package": "bun run vsce package --no-dependencies --allow-star-activation -o dist/",
     "package:prerelease": "bun run prepack && bun run vsce package --no-dependencies --allow-star-activation --pre-release -o dist/",
     "package:install": "bun run package && code --install-extension dist/statusbar-quick-actions-*.vsix",
