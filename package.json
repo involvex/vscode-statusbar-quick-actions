@@ -409,12 +409,13 @@
     "format": "bun run prettier --write .",
     "format:check": "bun run prettier --check .",
     "watch": "bun run compile:watch",
-    "clean": "bunx @involvex/rmdir-cli out",
+    "clean": "rmdir --force out dist",
     "rebuild": "bun run clean && bun run compile",
     "dev": "bun run clean && bun run watch",
-    "prepack": "bun run format && bun run lint:fix && bun run compile",
-    "package": "bun run vsce package --no-dependencies",
-    "package:install": "bun run package && code --install-extension statusbar-quick-actions-0.0.1.vsix",
+    "prepack": "bun run format && bun run lint:fix && bun run compile && mkdir dist",
+    "package": "bun run vsce package --no-dependencies -o dist/",
+    "package:prerelease": "bun run prepack && bun run vsce package --no-dependencies --pre-release -o dist/",
+    "package:install": "bun run package && code --install-extension dist/statusbar-quick-actions-*.vsix",
     "test": "echo \"No tests specified\" && exit 0",
     "install:deps": "bun install"
   },
@@ -430,6 +431,7 @@
     "typescript-eslint": "^8.39.0"
   },
   "dependencies": {
+    "@involvex/rmdir-cli": "^2.0.10",
     "minimatch": "^10.0.1"
   },
   "extensionDependencies": [],
