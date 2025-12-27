@@ -18,7 +18,7 @@
   },
   "homepage": "https://github.com/involvex/vscode-statusbar-quick-actions#readme",
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.107.0"
   },
   "categories": [
     "Other",
@@ -524,27 +524,27 @@
     "clean": "rmdir --force out dist",
     "rebuild": "bun run clean && bun run compile",
     "dev": "bun run clean && bun run watch",
-    "prepack": "bun run format && bun run lint:fix && bun run compile && mkdir dist",
-    "package": "bun run vsce package --no-dependencies -o dist/",
-    "package:prerelease": "bun run prepack && bun run vsce package --no-dependencies --pre-release -o dist/",
+    "prepack": "bun run format && bun run lint:fix && bun run typecheck && bun run compile && mkdir dist",
+    "package": "bun run vsce package --no-dependencies --allow-star-activation -o dist/",
+    "package:prerelease": "bun run prepack && bun run vsce package --no-dependencies --allow-star-activation --pre-release -o dist/",
     "package:install": "bun run package && code --install-extension dist/statusbar-quick-actions-*.vsix",
     "test": "echo \"No tests specified\" && exit 0",
     "install:deps": "bun install"
   },
   "devDependencies": {
-    "@eslint/js": "^9.13.0",
-    "@stylistic/eslint-plugin": "^2.9.0",
-    "@types/node": "^22.10.5",
-    "@types/vscode": "^1.100.0",
+    "@eslint/js": "^9.39.2",
+    "@stylistic/eslint-plugin": "^2.13.0",
+    "@types/node": "^22.19.3",
+    "@types/vscode": "^1.107.0",
     "@vscode/vsce": "^3.7.1",
-    "eslint": "^9.13.0",
+    "eslint": "^9.39.2",
     "prettier": "^3.7.4",
-    "typescript": "^5.9.2",
-    "typescript-eslint": "^8.39.0"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.50.1"
   },
   "dependencies": {
     "@involvex/rmdir-cli": "^2.0.10",
-    "minimatch": "^10.0.1"
+    "minimatch": "^10.1.1"
   },
   "extensionDependencies": [],
   "badges": [
