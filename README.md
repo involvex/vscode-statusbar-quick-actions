@@ -44,6 +44,11 @@ A comprehensive VSCode extension that provides highly customizable statusbar but
 ## Installation
 
 1. **From VS Code**: Search for "StatusBar Quick Actions" in the Extensions view
+
+   ```url
+   https://marketplace.visualstudio.com/items?itemName=involvex.statusbar-quick-actions
+   ```
+
 2. **From VSIX**: Download the extension package and install via `code --install-extension`
 3. **Development**: Clone the repository and install locally
 
@@ -520,7 +525,5 @@ MIT License - see LICENSE file for details.
 - **Community**: Join discussions and share configurations
 
 ---
-
-**Made with ❤️ for the VS Code community**
 
 _Streamline your development workflow with intelligent statusbar actions._

@@ -185,6 +185,7 @@ export interface StatusBarButtonConfig {
   workingDirectory?: string;
   environment?: Record<string, string>;
   history?: HistoryConfig;
+  dynamicLabel?: DynamicLabelField; // Dynamic label configuration
 }
 
 /**
@@ -317,3 +318,51 @@ export interface MenuCategoryItem {
  * Button event types
  */
 export type ButtonEvent = "click" | "hover" | "focus" | "blur";
+
+/**
+ * Dynamic label field configuration
+ */
+export interface DynamicLabelField {
+  type: "time" | "url" | "env" | "git" | "custom";
+  format?: string; // For time: date-time format string
+  url?: string; // For url: URL to fetch from
+  envVar?: string; // For env: environment variable name
+  gitInfo?: "branch" | "status" | "remote"; // For git: git information type
+  customFunction?: string; // For custom: function name to evaluate
+  refreshInterval?: number; // Refresh interval in milliseconds (0 = no auto-refresh)
+  fallback?: string; // Fallback value if evaluation fails
+  template?: string; // Template string with ${placeholder} syntax
+}
+
+/**
+ * Preset configuration for button sets
+ */
+export interface PresetConfig {
+  id: string;
+  name: string;
+  description?: string;
+  buttons: StatusBarButtonConfig[];
+  theme?: ThemeConfig;
+  metadata?: {
+    created: Date;
+    modified: Date;
+    author?: string;
+    tags?: string[];
+  };
+}
+
+/**
+ * Preset application mode
+ */
+export type PresetApplicationMode = "replace" | "merge" | "append";
+
+/**
+ * Dynamic label state
+ */
+export interface DynamicLabelState {
+  fieldConfig: DynamicLabelField;
+  lastValue: string;
+  lastUpdated: Date;
+  refreshTimer?: NodeJS.Timeout;
+  error?: string;
+}

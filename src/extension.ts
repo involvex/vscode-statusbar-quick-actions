@@ -18,6 +18,8 @@ import { ThemeManager } from "./theme";
 import { VisibilityManager } from "./visibility";
 import { MaterialIconManager } from "./material-icons";
 import { OutputPanelManager } from "./output-panel";
+import { PresetManager } from "./preset-manager";
+import { DynamicLabelManager } from "./dynamic-label";
 
 /**
  * Main extension class
@@ -30,6 +32,8 @@ export class StatusBarQuickActionsExtension {
   private visibilityManager!: VisibilityManager;
   private materialIconManager!: MaterialIconManager;
   private outputPanelManager!: OutputPanelManager;
+  private presetManager!: PresetManager;
+  private dynamicLabelManager!: DynamicLabelManager;
   private buttonStates: Map<string, ButtonState> = new Map<
     string,
     ButtonState
@@ -104,6 +108,12 @@ export class StatusBarQuickActionsExtension {
     if (this.visibilityManager) {
       this.visibilityManager.dispose();
     }
+    if (this.presetManager) {
+      this.presetManager.dispose();
+    }
+    if (this.dynamicLabelManager) {
+      this.dynamicLabelManager.dispose();
+    }
 
     this.isActivated = false;
     console.log("StatusBar Quick Actions extension deactivated");
@@ -144,6 +154,21 @@ export class StatusBarQuickActionsExtension {
       );
       console.log("VisibilityManager initialized successfully");
 
+      // Initialize Preset Manager
+      this.presetManager = new PresetManager();
+      this.presetManager.initialize(this.context);
+      console.log("PresetManager initialized successfully");
+
+      // Initialize Dynamic Label Manager
+      this.dynamicLabelManager = new DynamicLabelManager();
+      await this.dynamicLabelManager.initialize();
+      console.log("DynamicLabelManager initialized successfully");
+
+      // Setup dynamic label refresh callback
+      this.dynamicLabelManager.onLabelRefresh = (buttonId) => {
+        this.refreshButtonLabel(buttonId);
+      };
+
       // Setup editor change listener for debounced visibility checks
       this.setupEditorChangeListener();
       console.log("Editor change listener setup successfully");
@@ -183,6 +208,28 @@ export class StatusBarQuickActionsExtension {
       vscode.commands.registerCommand(
         "statusbarQuickActions.clearHistory",
         this.clearHistory.bind(this),
+      ),
+    );
+
+    // Preset management commands
+    this.disposables.push(
+      vscode.commands.registerCommand(
+        "statusbarQuickActions.managePresets",
+        this.managePresets.bind(this),
+      ),
+    );
+
+    this.disposables.push(
+      vscode.commands.registerCommand(
+        "statusbarQuickActions.applyPreset",
+        this.applyPresetCommand.bind(this),
+      ),
+    );
+
+    this.disposables.push(
+      vscode.commands.registerCommand(
+        "statusbarQuickActions.saveAsPreset",
+        this.saveAsPreset.bind(this),
       ),
     );
 
@@ -383,6 +430,12 @@ export class StatusBarQuickActionsExtension {
 
       this.buttonStates.set(buttonConfig.id, buttonState);
       this.disposables.push(statusBarItem);
+
+      // Initialize dynamic label if configured
+      if (buttonConfig.dynamicLabel) {
+        await this.refreshButtonLabel(buttonConfig.id);
+      }
+
       statusBarItem.show();
 
       console.log(`Button ${buttonConfig.id} shown successfully`);
@@ -685,6 +738,10 @@ export class StatusBarQuickActionsExtension {
         description: "Enable or disable a button",
       },
       {
+        label: "$(archive) Manage Presets",
+        description: "Save, load, or manage configuration presets",
+      },
+      {
         label: "$(settings-gear) Open Full Settings",
         description: "Open VS Code settings page",
       },
@@ -722,6 +779,9 @@ export class StatusBarQuickActionsExtension {
         break;
       case "$(sync) Toggle Button":
         await this.toggleButton();
+        break;
+      case "$(archive) Manage Presets":
+        await this.managePresets();
         break;
       case "$(settings-gear) Open Full Settings":
         vscode.commands.executeCommand(
@@ -1305,6 +1365,305 @@ export class StatusBarQuickActionsExtension {
     );
 
     this.disposables.push(this.editorChangeListener);
+  }
+
+  /**
+   * Manage presets UI
+   */
+  private async managePresets(): Promise<void> {
+    const items: vscode.QuickPickItem[] = [
+      {
+        label: "$(add) Create New Preset",
+        description: "Save current configuration as a preset",
+      },
+      {
+        label: "$(archive) Apply Preset",
+        description: "Load a saved preset",
+      },
+      {
+        label: "$(list-unordered) View All Presets",
+        description: "Browse and manage saved presets",
+      },
+      {
+        label: "$(export) Export Preset",
+        description: "Export a preset to a file",
+      },
+      {
+        label: "$(import) Import Preset",
+        description: "Import a preset from a file",
+      },
+    ];
+
+    const selected = await vscode.window.showQuickPick(items, {
+      placeHolder: "Preset Management",
+      matchOnDescription: true,
+    });
+
+    if (!selected) {
+      return;
+    }
+
+    switch (selected.label) {
+      case "$(add) Create New Preset":
+        await this.saveAsPreset();
+        break;
+      case "$(archive) Apply Preset":
+        await this.applyPresetCommand();
+        break;
+      case "$(list-unordered) View All Presets":
+        await this.viewAllPresets();
+        break;
+      case "$(export) Export Preset":
+        await this.exportPresetCommand();
+        break;
+      case "$(import) Import Preset":
+        await this.importPresetCommand();
+        break;
+    }
+  }
+
+  /**
+   * Save current configuration as a preset
+   */
+  private async saveAsPreset(): Promise<void> {
+    const name = await vscode.window.showInputBox({
+      prompt: "Enter preset name",
+      placeHolder: "e.g., My Development Setup",
+      validateInput: (value) => (value ? null : "Name is required"),
+    });
+
+    if (!name) {
+      return;
+    }
+
+    const description = await vscode.window.showInputBox({
+      prompt: "Enter preset description (optional)",
+      placeHolder: "e.g., Standard buttons for Node.js development",
+    });
+
+    try {
+      const currentConfig = this.configManager.getConfig();
+      await this.presetManager.createPresetFromConfig(
+        name,
+        description || "",
+        currentConfig,
+      );
+
+      vscode.window.showInformationMessage(
+        `✅ Preset "${name}" created successfully!`,
+      );
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to create preset: ${error}`);
+    }
+  }
+
+  /**
+   * Apply a preset command
+   */
+  private async applyPresetCommand(): Promise<void> {
+    const presets = this.presetManager.getAllPresets();
+
+    if (presets.length === 0) {
+      vscode.window.showInformationMessage("No presets available yet.");
+      return;
+    }
+
+    const items = presets.map((preset) => ({
+      label: preset.name,
+      description: preset.description,
+      detail: `${preset.buttons.length} buttons · Created ${preset.metadata?.created.toLocaleDateString()}`,
+      preset,
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+      placeHolder: "Select a preset to apply",
+      matchOnDescription: true,
+      matchOnDetail: true,
+    });
+
+    if (!selected) {
+      return;
+    }
+
+    // Ask for application mode
+    const modeItems: vscode.QuickPickItem[] = [
+      {
+        label: "Replace",
+        description: "Replace all current buttons with preset buttons",
+      },
+      {
+        label: "Merge",
+        description:
+          "Merge preset buttons with current buttons (overwrite duplicates)",
+      },
+      {
+        label: "Append",
+        description: "Add preset buttons to current buttons",
+      },
+    ];
+
+    const modeSelected = await vscode.window.showQuickPick(modeItems, {
+      placeHolder: "How should the preset be applied?",
+    });
+
+    if (!modeSelected) {
+      return;
+    }
+
+    const mode = modeSelected.label.toLowerCase() as
+      | "replace"
+      | "merge"
+      | "append";
+
+    // Show impact preview
+    const impact = this.configManager.getPresetImpact(selected.preset, mode);
+    const confirm = await vscode.window.showWarningMessage(
+      `Apply preset "${selected.preset.name}"?\n\nImpact:\n• ${impact.added} buttons added\n• ${impact.modified} buttons modified\n• ${impact.removed} buttons removed`,
+      { modal: true },
+      "Yes, Apply",
+      "No",
+    );
+
+    if (confirm !== "Yes, Apply") {
+      return;
+    }
+
+    try {
+      await this.configManager.applyPreset(selected.preset, mode);
+      vscode.window.showInformationMessage(
+        `✅ Preset "${selected.preset.name}" applied successfully!`,
+      );
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to apply preset: ${error}`);
+    }
+  }
+
+  /**
+   * View all presets
+   */
+  private async viewAllPresets(): Promise<void> {
+    const presets = this.presetManager.getAllPresets();
+
+    if (presets.length === 0) {
+      vscode.window.showInformationMessage("No presets available yet.");
+      return;
+    }
+
+    const items = presets.map((preset) => ({
+      label: preset.name,
+      description: `${preset.buttons.length} buttons`,
+      detail: preset.description,
+      buttons: [
+        {
+          iconPath: new vscode.ThemeIcon("edit"),
+          tooltip: "Rename Preset",
+        },
+        {
+          iconPath: new vscode.ThemeIcon("copy"),
+          tooltip: "Duplicate Preset",
+        },
+        {
+          iconPath: new vscode.ThemeIcon("trash"),
+          tooltip: "Delete Preset",
+        },
+      ],
+      preset,
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+      placeHolder: "Manage Presets",
+      matchOnDescription: true,
+      matchOnDetail: true,
+    });
+
+    if (selected) {
+      // For now, just apply the preset if selected
+      await this.applyPresetCommand();
+    }
+  }
+
+  /**
+   * Export preset command
+   */
+  private async exportPresetCommand(): Promise<void> {
+    const presets = this.presetManager.getAllPresets();
+
+    if (presets.length === 0) {
+      vscode.window.showInformationMessage("No presets available to export.");
+      return;
+    }
+
+    const items = presets.map((preset) => ({
+      label: preset.name,
+      description: `${preset.buttons.length} buttons`,
+      preset,
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+      placeHolder: "Select a preset to export",
+    });
+
+    if (!selected) {
+      return;
+    }
+
+    try {
+      await this.presetManager.exportPreset(selected.preset);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to export preset: ${error}`);
+    }
+  }
+
+  /**
+   * Import preset command
+   */
+  private async importPresetCommand(): Promise<void> {
+    try {
+      const preset = await this.presetManager.importPreset();
+      if (preset) {
+        // Optionally ask if they want to apply it immediately
+        const apply = await vscode.window.showInformationMessage(
+          `Preset "${preset.name}" imported. Apply it now?`,
+          "Yes",
+          "No",
+        );
+
+        if (apply === "Yes") {
+          await this.configManager.applyPreset(preset, "replace");
+        }
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to import preset: ${error}`);
+    }
+  }
+
+  /**
+   * Refresh a button's dynamic label
+   */
+  private async refreshButtonLabel(buttonId: string): Promise<void> {
+    const buttonState = this.buttonStates.get(buttonId);
+    if (!buttonState || !buttonState.config.dynamicLabel) {
+      return;
+    }
+
+    try {
+      const newLabel = await this.dynamicLabelManager.evaluateLabel(
+        buttonId,
+        buttonState.config.dynamicLabel,
+      );
+
+      // Update button text with dynamic label
+      if (buttonState.config.icon) {
+        // If icon exists, append label after icon
+        const iconText = this.getButtonDisplayText(buttonState.config);
+        buttonState.item.text = `${iconText} ${newLabel}`;
+      } else {
+        // Replace text entirely
+        buttonState.item.text = newLabel;
+      }
+    } catch (error) {
+      console.error(`Failed to refresh label for ${buttonId}:`, error);
+    }
   }
 }
 

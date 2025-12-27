@@ -9,6 +9,8 @@ import {
   ThemeConfig,
   NotificationConfig,
   CommandHistoryEntry,
+  PresetConfig,
+  PresetApplicationMode,
 } from "./types";
 
 /**
@@ -376,6 +378,145 @@ export class ConfigManager {
     }
 
     await this.context.globalState.update(ConfigManager.GLOBAL_STATE_KEY, []);
+  }
+
+  /**
+   * Apply a preset to the current configuration
+   */
+  public async applyPreset(
+    preset: PresetConfig,
+    mode: PresetApplicationMode = "replace",
+  ): Promise<void> {
+    const currentConfig = this.getConfig();
+    let newButtons: StatusBarButtonConfig[];
+
+    switch (mode) {
+      case "replace":
+        // Replace all buttons with preset buttons
+        newButtons = [...preset.buttons];
+        break;
+
+      case "merge":
+        // Merge preset buttons, overwriting buttons with same ID
+        newButtons = [...currentConfig.buttons];
+        preset.buttons.forEach((presetButton) => {
+          const existingIndex = newButtons.findIndex(
+            (b) => b.id === presetButton.id,
+          );
+          if (existingIndex >= 0) {
+            newButtons[existingIndex] = presetButton;
+          } else {
+            newButtons.push(presetButton);
+          }
+        });
+        break;
+
+      case "append":
+        // Append preset buttons to existing buttons, ensuring unique IDs
+        newButtons = [...currentConfig.buttons];
+        preset.buttons.forEach((presetButton) => {
+          // Generate new ID if there's a conflict
+          let buttonToAdd = presetButton;
+          if (newButtons.some((b) => b.id === presetButton.id)) {
+            buttonToAdd = {
+              ...presetButton,
+              id: `${presetButton.id}_${Date.now()}`,
+            };
+          }
+          newButtons.push(buttonToAdd);
+        });
+        break;
+
+      default:
+        throw new Error(`Unknown preset application mode: ${mode}`);
+    }
+
+    // Update buttons configuration
+    await this.setConfig("buttons", newButtons);
+
+    // Apply theme if present in preset
+    if (preset.theme) {
+      await this.setConfig("theme", preset.theme);
+    }
+  }
+
+  /**
+   * Get buttons that would be affected by preset application
+   */
+  public getPresetImpact(
+    preset: PresetConfig,
+    mode: PresetApplicationMode,
+  ): {
+    added: number;
+    modified: number;
+    removed: number;
+    total: number;
+  } {
+    const currentConfig = this.getConfig();
+    const currentIds = new Set(currentConfig.buttons.map((b) => b.id));
+
+    let added = 0;
+    let modified = 0;
+    let removed = 0;
+
+    switch (mode) {
+      case "replace":
+        added = preset.buttons.length;
+        removed = currentConfig.buttons.length;
+        break;
+
+      case "merge":
+        preset.buttons.forEach((pb) => {
+          if (currentIds.has(pb.id)) {
+            modified++;
+          } else {
+            added++;
+          }
+        });
+        break;
+
+      case "append":
+        added = preset.buttons.length;
+        break;
+    }
+
+    return {
+      added,
+      modified,
+      removed,
+      total: added + modified + removed,
+    };
+  }
+
+  /**
+   * Validate preset before application
+   */
+  public validatePresetApplication(preset: PresetConfig): {
+    isValid: boolean;
+    errors: string[];
+  } {
+    const errors: string[] = [];
+
+    if (!preset.buttons || !Array.isArray(preset.buttons)) {
+      errors.push("Preset must contain a buttons array");
+    } else {
+      preset.buttons.forEach((button, index) => {
+        if (!button.id) {
+          errors.push(`Button ${index}: ID is required`);
+        }
+        if (!button.text && !button.icon) {
+          errors.push(`Button ${index}: Either text or icon is required`);
+        }
+        if (!button.command) {
+          errors.push(`Button ${index}: Command is required`);
+        }
+      });
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+    };
   }
 
   /**
