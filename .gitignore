@@ -1,0 +1,8 @@
+out
+node_modules
+.env
+.mira
+.claude
+.vscode
+statusbar-quick-actions-*.vsix
+*.vsix

@@ -1,0 +1,453 @@
+{
+  "name": "statusbar-quick-actions",
+  "displayName": "StatusBar Quick Actions",
+  "description": "Highly customizable statusbar buttons for executing user-defined scripts and commands with advanced features including theme support, execution tracking, and intelligent visibility conditions.",
+  "version": "0.0.1",
+  "publisher": "involvex",
+  "author": {
+    "name": "involvex"
+  },
+  "private": false,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/statusbar-quick-actions.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/statusbar-quick-actions/issues"
+  },
+  "homepage": "https://github.com/your-username/statusbar-quick-actions#readme",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other",
+    "Extension Packs",
+    "Snippets"
+  ],
+  "keywords": [
+    "statusbar",
+    "quick-actions",
+    "buttons",
+    "scripts",
+    "commands",
+    "npm",
+    "yarn",
+    "pnpm",
+    "bun",
+    "git",
+    "development",
+    "productivity",
+    "customizable",
+    "theme",
+    "accessibility"
+  ],
+  "activationEvents": [
+    "*"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "statusbarQuickActions.editButton",
+        "title": "StatusBar Quick Actions: Edit Button",
+        "category": "StatusBar Quick Actions"
+      },
+      {
+        "command": "statusbarQuickActions.viewHistory",
+        "title": "StatusBar Quick Actions: View History",
+        "category": "StatusBar Quick Actions"
+      },
+      {
+        "command": "statusbarQuickActions.clearHistory",
+        "title": "StatusBar Quick Actions: Clear History",
+        "category": "StatusBar Quick Actions"
+      },
+      {
+        "command": "statusbarQuickActions.navigateButtons",
+        "title": "StatusBar Quick Actions: Navigate Buttons",
+        "category": "StatusBar Quick Actions"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "statusbarQuickActions.navigateButtons",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "StatusBar Quick Actions",
+      "properties": {
+        "statusbarQuickActions.buttons": {
+          "type": "array",
+          "default": [],
+          "description": "Array of statusbar button configurations",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique identifier for the button"
+              },
+              "text": {
+                "type": "string",
+                "description": "Text to display on the button (supports emojis)"
+              },
+              "tooltip": {
+                "type": "string",
+                "description": "Tooltip text shown on hover"
+              },
+              "icon": {
+                "type": "object",
+                "description": "Icon configuration for the button",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "VS Code icon ID (e.g., 'symbol-method', 'play')"
+                  },
+                  "animation": {
+                    "type": "string",
+                    "enum": [
+                      "spin",
+                      "pulse"
+                    ],
+                    "description": "Icon animation type"
+                  }
+                }
+              },
+              "command": {
+                "type": "object",
+                "description": "Command configuration",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "npm",
+                      "yarn",
+                      "pnpm",
+                      "bun",
+                      "shell",
+                      "github",
+                      "vscode",
+                      "task",
+                      "detect"
+                    ],
+                    "description": "Type of command to execute"
+                  },
+                  "script": {
+                    "type": "string",
+                    "description": "Script name for package manager commands"
+                  },
+                  "command": {
+                    "type": "string",
+                    "description": "Command to execute for shell and other command types"
+                  },
+                  "args": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Additional arguments for the command"
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              "enabled": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether the button is enabled"
+              },
+              "alignment": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "right"
+                ],
+                "default": "left",
+                "description": "Alignment of the button in the statusbar"
+              },
+              "priority": {
+                "type": "number",
+                "default": 100,
+                "description": "Priority for button positioning (higher numbers appear first)"
+              },
+              "colors": {
+                "type": "object",
+                "description": "Custom colors for the button",
+                "properties": {
+                  "foreground": {
+                    "type": "string",
+                    "description": "Foreground color (theme color or hex)"
+                  },
+                  "background": {
+                    "type": "string",
+                    "description": "Background color (theme color or hex)"
+                  }
+                }
+              },
+              "execution": {
+                "type": "object",
+                "description": "Execution behavior configuration",
+                "properties": {
+                  "foreground": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Execute in foreground (blocking) or background (non-blocking)"
+                  },
+                  "showProgress": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show progress indicator during execution"
+                  },
+                  "timeout": {
+                    "type": "number",
+                    "default": 30000,
+                    "description": "Timeout in milliseconds for command execution"
+                  },
+                  "notifications": {
+                    "type": "object",
+                    "description": "Notification settings",
+                    "properties": {
+                      "showSuccess": {
+                        "type": "boolean",
+                        "default": true
+                      },
+                      "showError": {
+                        "type": "boolean",
+                        "default": true
+                      },
+                      "showOutput": {
+                        "type": "boolean",
+                        "default": false
+                      }
+                    }
+                  }
+                }
+              },
+              "visibility": {
+                "type": "object",
+                "description": "Visibility conditions for the button",
+                "properties": {
+                  "conditions": {
+                    "type": "array",
+                    "description": "Array of visibility conditions (all must be met)",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "fileType",
+                            "fileExists",
+                            "gitStatus",
+                            "workspaceFolder"
+                          ],
+                          "description": "Type of visibility condition"
+                        },
+                        "patterns": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "File patterns to match (for fileType)"
+                        },
+                        "path": {
+                          "type": "string",
+                          "description": "File/directory path to check (for fileExists)"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "repository",
+                            "clean",
+                            "dirty",
+                            "ahead",
+                            "behind"
+                          ],
+                          "description": "Git status to match (for gitStatus)"
+                        },
+                        "folders": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Workspace folder names to match (for workspaceFolder)"
+                        },
+                        "invert": {
+                          "type": "boolean",
+                          "default": false,
+                          "description": "Invert the condition logic"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ]
+                    }
+                  }
+                }
+              },
+              "workingDirectory": {
+                "type": "string",
+                "description": "Working directory for command execution"
+              },
+              "environment": {
+                "type": "object",
+                "description": "Environment variables to set for command execution",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "history": {
+                "type": "object",
+                "description": "History tracking configuration",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "maxEntries": {
+                    "type": "number",
+                    "default": 20,
+                    "description": "Maximum number of history entries to keep"
+                  }
+                }
+              }
+            },
+            "required": [
+              "id",
+              "text",
+              "command"
+            ]
+          }
+        },
+        "statusbarQuickActions.settings.theme": {
+          "type": "object",
+          "description": "Theme configuration for the extension",
+          "properties": {
+            "darkTheme": {
+              "type": "boolean",
+              "default": true,
+              "description": "Use dark theme colors"
+            },
+            "highContrast": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable high contrast mode for better accessibility"
+            },
+            "customColors": {
+              "type": "object",
+              "description": "Custom color palette",
+              "properties": {
+                "success": {
+                  "type": "string",
+                  "default": "#28a745",
+                  "description": "Color for success states"
+                },
+                "error": {
+                  "type": "string",
+                  "default": "#dc3545",
+                  "description": "Color for error states"
+                },
+                "warning": {
+                  "type": "string",
+                  "default": "#ffc107",
+                  "description": "Color for warning states"
+                },
+                "info": {
+                  "type": "string",
+                  "default": "#17a2b8",
+                  "description": "Color for info states"
+                },
+                "executing": {
+                  "type": "string",
+                  "default": "#007acc",
+                  "description": "Color for executing states"
+                },
+                "disabled": {
+                  "type": "string",
+                  "default": "#6c757d",
+                  "description": "Color for disabled states"
+                }
+              }
+            },
+            "statusBarColors": {
+              "type": "object",
+              "description": "Custom statusbar colors",
+              "properties": {
+                "foreground": {
+                  "type": "string",
+                  "default": "statusBarItem.foreground",
+                  "description": "Default foreground color"
+                },
+                "background": {
+                  "type": "string",
+                  "default": "statusBarItem.background",
+                  "description": "Default background color"
+                }
+              }
+            }
+          }
+        },
+        "statusbarQuickActions.settings.debug": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug logging for troubleshooting"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "bun run compile",
+    "compile": "bun run tsc -p ./",
+    "compile:watch": "bun run tsc -watch -p ./",
+    "lint": "bun run eslint .",
+    "lint:fix": "bun run eslint --fix .",
+    "format": "bun run prettier --write .",
+    "format:check": "bun run prettier --check .",
+    "watch": "bun run compile:watch",
+    "clean": "bunx @involvex/rmdir-cli out",
+    "rebuild": "bun run clean && bun run compile",
+    "dev": "bun run clean && bun run watch",
+    "prepack": "bun run format && bun run lint:fix && bun run compile",
+    "package": "bun run vsce package --no-dependencies",
+    "package:install": "bun run package && code --install-extension statusbar-quick-actions-0.0.1.vsix",
+    "test": "echo \"No tests specified\" && exit 0",
+    "install:deps": "bun install"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "@stylistic/eslint-plugin": "^2.9.0",
+    "@types/node": "^22.10.5",
+    "@types/vscode": "^1.100.0",
+    "@vscode/vsce": "^3.7.1",
+    "eslint": "^9.13.0",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.39.0"
+  },
+  "dependencies": {
+    "minimatch": "^10.0.1"
+  },
+  "extensionDependencies": [],
+  "badges": [
+    {
+      "url": "https://img.shields.io/badge/version-blue.svg",
+      "href": "https://img.shields.io/badge/version-blue.svg",
+      "description": "Version"
+    },
+    {
+      "url": "https://img.shields.io/badge/downloads-blue.svg",
+      "href": "https://img.shields.io/badge/downloads-blue.svg",
+      "description": "Downloads"
+    },
+    {
+      "url": "https://img.shields.io/badge/Rating-blue.svg",
+      "href": "https://img.shields.io/badge/Rating-blue.svg",
+      "description": "Rating"
+    }
+  ]
+}
