@@ -2,10 +2,13 @@
   "name": "statusbar-quick-actions",
   "displayName": "StatusBar Quick Actions",
   "description": "Highly customizable statusbar buttons for executing user-defined scripts and commands with advanced features including theme support, execution tracking, and intelligent visibility conditions.",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "publisher": "involvex",
   "author": {
     "name": "involvex"
+  },
+  "bin": {
+    "statusbar-quick-actions-configcli": "src/config-cli.ts"
   },
   "private": false,
   "license": "MIT",
@@ -541,12 +544,16 @@
     "package:prerelease": "bun run prepack && bun run vsce package --no-dependencies --allow-star-activation --pre-release -o dist/",
     "package:install": "bun run package && code --install-extension dist/statusbar-quick-actions-*.vsix",
     "test": "echo \"No tests specified\" && exit 0",
-    "install:deps": "bun install"
+    "install:deps": "bun install",
+    "dev:cli": "bun run src/config-cli.ts",
+    "debug": "bun run  --inspect-brk compile"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "@stylistic/eslint-plugin": "^2.13.0",
-    "@types/node": "^22.19.3",
+    "@stylistic/eslint-plugin": "^5.6.1",
+    "@types/bun": "^1.3.5",
+    "@types/console-clear": "^1.1.4",
+    "@types/node": "^25.0.3",
     "@types/vscode": "^1.107.0",
     "@vscode/vsce": "^3.7.1",
     "eslint": "^9.39.2",
@@ -587,5 +594,9 @@
       "href": "https://github.com/involvex/vscode-statusbar-quick-actions/issues",
       "description": "GitHub Issues"
     }
-  ]
+  ],
+  "dependencies": {
+    "bun": "^1.3.5",
+    "console-clear": "^1.1.1"
+  }
 }

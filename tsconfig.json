@@ -4,9 +4,16 @@
     "target": "ES2024",
     "lib": ["ES2024"],
     "outDir": "out",
-    "sourceMap": true,
+    "sourceMap": false,
     "strict": true,
-    "rootDir": "src"
+    "rootDir": "src",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": false,
+    "declarationMap": false,
+    "inlineSourceMap": false,
+    "removeComments": true
   },
   "exclude": ["node_modules", ".vscode-test"]
 }

@@ -41,12 +41,25 @@ export class StatusBarQuickActionsExtension {
   private disposables: vscode.Disposable[] = [];
   private editorChangeListener: vscode.Disposable | null = null;
   private isActivated = false;
+  private debugMode = false;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
     this.configManager = new ConfigManager();
     this.commandExecutor = new CommandExecutor();
     this.themeManager = new ThemeManager();
+    this.debugMode = vscode.workspace
+      .getConfiguration("statusbarQuickActions.settings")
+      .get<boolean>("debug", false);
+  }
+
+  /**
+   * Log debug messages only when debug mode is enabled
+   */
+  private debugLog(...args: unknown[]): void {
+    if (this.debugMode) {
+      console.log("[StatusBar Quick Actions]", ...args);
+    }
   }
 
   /**
@@ -58,26 +71,27 @@ export class StatusBarQuickActionsExtension {
     }
 
     try {
-      // Initialize managers
+      // Initialize critical managers in parallel
       await this.initializeManagers();
 
-      // Register commands
+      // Register commands (synchronous, fast)
       this.registerCommands();
 
-      // Set up configuration watching
+      // Set up configuration watching (synchronous, fast)
       this.setupConfigurationWatching();
 
-      // Load initial configuration
+      // Load initial configuration and create buttons
       await this.loadConfiguration();
 
       this.isActivated = true;
-      console.log("StatusBar Quick Actions extension activated successfully");
+      this.debugLog("Extension activated successfully");
 
-      // Show welcome message on first activation
-      if (!this.context.globalState.get("hasBeenActivated")) {
-        await this.showWelcomeMessage();
-        await this.context.globalState.update("hasBeenActivated", true);
-      }
+      // Defer non-critical operations to avoid blocking activation
+      setImmediate(() => {
+        this.showWelcomeMessageIfNeeded().catch((error) => {
+          this.debugLog("Failed to show welcome message:", error);
+        });
+      });
     } catch (error) {
       console.error(
         "Failed to activate StatusBar Quick Actions extension:",
@@ -86,6 +100,16 @@ export class StatusBarQuickActionsExtension {
       vscode.window.showErrorMessage(
         `Failed to activate StatusBar Quick Actions: ${error}`,
       );
+    }
+  }
+
+  /**
+   * Show welcome message on first activation (deferred)
+   */
+  private async showWelcomeMessageIfNeeded(): Promise<void> {
+    if (!this.context.globalState.get("hasBeenActivated")) {
+      await this.showWelcomeMessage();
+      await this.context.globalState.update("hasBeenActivated", true);
     }
   }
 
@@ -116,62 +140,60 @@ export class StatusBarQuickActionsExtension {
     }
 
     this.isActivated = false;
-    console.log("StatusBar Quick Actions extension deactivated");
+    this.debugLog("Extension deactivated");
   }
 
   /**
-   * Initialize all managers
+   * Initialize all managers - optimized for parallel execution
    */
   private async initializeManagers(): Promise<void> {
     try {
-      // Initialize configuration manager
+      // Initialize configuration manager first (synchronous, required by others)
       this.configManager.initialize(this.context);
-      console.log("ConfigManager initialized successfully");
+      this.debugLog("ConfigManager initialized");
 
-      // Initialize theme manager
-      await this.themeManager.initialize(this.context);
-      console.log("ThemeManager initialized successfully");
-
-      // Initialize Material Icons Manager
-      this.materialIconManager = new MaterialIconManager();
-      console.log("MaterialIconManager initialized successfully");
-
-      // Initialize Output Panel Manager with config
+      // Get configs once to avoid multiple reads
       const outputConfig = this.configManager.getConfigValue(
         "settings.output",
         this.getDefaultOutputConfig(),
       );
-      this.outputPanelManager = new OutputPanelManager(outputConfig);
-      console.log("OutputPanelManager initialized successfully");
-
-      // Initialize Visibility Manager with debounce config
       const performanceConfig = this.configManager.getConfigValue(
         "settings.performance",
         this.getDefaultPerformanceConfig(),
       );
+
+      // Initialize managers in parallel where possible
+      await Promise.all([
+        // Theme manager (async)
+        this.themeManager.initialize(this.context).then(() => {
+          this.debugLog("ThemeManager initialized");
+        }),
+
+        // Dynamic Label Manager (async)
+        (async () => {
+          this.dynamicLabelManager = new DynamicLabelManager();
+          await this.dynamicLabelManager.initialize();
+          this.dynamicLabelManager.onLabelRefresh = (buttonId) => {
+            this.refreshButtonLabel(buttonId);
+          };
+          this.debugLog("DynamicLabelManager initialized");
+        })(),
+      ]);
+
+      // Initialize synchronous managers (fast, no await needed)
+      this.materialIconManager = new MaterialIconManager();
+      this.outputPanelManager = new OutputPanelManager(outputConfig);
       this.visibilityManager = new VisibilityManager(
         performanceConfig.visibilityDebounceMs,
       );
-      console.log("VisibilityManager initialized successfully");
-
-      // Initialize Preset Manager
       this.presetManager = new PresetManager();
       this.presetManager.initialize(this.context);
-      console.log("PresetManager initialized successfully");
 
-      // Initialize Dynamic Label Manager
-      this.dynamicLabelManager = new DynamicLabelManager();
-      await this.dynamicLabelManager.initialize();
-      console.log("DynamicLabelManager initialized successfully");
+      this.debugLog("All synchronous managers initialized");
 
-      // Setup dynamic label refresh callback
-      this.dynamicLabelManager.onLabelRefresh = (buttonId) => {
-        this.refreshButtonLabel(buttonId);
-      };
-
-      // Setup editor change listener for debounced visibility checks
+      // Setup editor change listener (lightweight)
       this.setupEditorChangeListener();
-      console.log("Editor change listener setup successfully");
+      this.debugLog("Managers initialization complete");
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -258,6 +280,11 @@ export class StatusBarQuickActionsExtension {
   private setupConfigurationWatching(): void {
     this.disposables.push(
       this.configManager.onConfigurationChanged(async (newConfig) => {
+        // Update debug mode when configuration changes
+        this.debugMode = vscode.workspace
+          .getConfiguration("statusbarQuickActions.settings")
+          .get<boolean>("debug", false);
+        this.debugLog("Configuration changed, updating buttons");
         await this.updateConfiguration(newConfig);
       }),
     );
@@ -275,15 +302,20 @@ export class StatusBarQuickActionsExtension {
    * Update configuration and recreate statusbar items
    */
   private async updateConfiguration(config: ExtensionConfig): Promise<void> {
-    console.log("Updating configuration with buttons:", config.buttons.length);
+    this.debugLog(
+      "Updating configuration with buttons:",
+      config.buttons.length,
+    );
 
     // Debug: Log each button configuration
-    config.buttons.forEach((button, index) => {
-      console.log(
-        `Button ${index}: ${button.id} - ${button.text || "no text"}`,
-        button,
-      );
-    });
+    if (this.debugMode) {
+      config.buttons.forEach((button, index) => {
+        this.debugLog(
+          `Button ${index}: ${button.id} - ${button.text || "no text"}`,
+          button,
+        );
+      });
+    }
 
     // Validate configuration first
     const validation = this.configManager.validateConfig(config);
@@ -315,24 +347,30 @@ export class StatusBarQuickActionsExtension {
     let failedCount = 0;
     let disabledCount = 0;
 
-    for (const buttonConfig of config.buttons) {
+    // Create buttons in parallel for better performance
+    const buttonCreationPromises = config.buttons.map(async (buttonConfig) => {
       if (buttonConfig.enabled === false) {
-        console.log(`Button ${buttonConfig.id} is disabled, skipping creation`);
+        this.debugLog(`Button ${buttonConfig.id} is disabled, skipping`);
         disabledCount++;
-        continue;
+        return { created: false, disabled: true };
       }
 
       const created = await this.createStatusBarItem(buttonConfig);
-      if (created) {
+      return { created, disabled: false };
+    });
+
+    const results = await Promise.all(buttonCreationPromises);
+    results.forEach((result) => {
+      if (result.created) {
         createdCount++;
-      } else {
+      } else if (!result.disabled) {
         failedCount++;
       }
-    }
+    });
 
     // Log summary
-    console.log(
-      `StatusBar Quick Actions: Created ${createdCount} buttons, ${failedCount} failed, ${disabledCount} disabled`,
+    this.debugLog(
+      `Created ${createdCount} buttons, ${failedCount} failed, ${disabledCount} disabled`,
     );
 
     // Show notification if no buttons were created
@@ -351,19 +389,22 @@ export class StatusBarQuickActionsExtension {
     buttonConfig: StatusBarButtonConfig,
   ): Promise<boolean> {
     try {
-      console.log(`Creating status bar item for button: ${buttonConfig.id}`);
+      this.debugLog(`Creating status bar item for button: ${buttonConfig.id}`);
 
       // Validate button configuration
       if (!buttonConfig.id) {
-        console.error(`Button ${buttonConfig.id || "unknown"} missing ID`);
+        const error = `Button ${buttonConfig.id || "unknown"} missing ID`;
+        this.debugLog(error);
         throw new Error("Button ID is required");
       }
       if (!buttonConfig.text && !buttonConfig.icon) {
-        console.error(`Button ${buttonConfig.id} missing both text and icon`);
+        const error = `Button ${buttonConfig.id} missing both text and icon`;
+        this.debugLog(error);
         throw new Error("Either button text or icon is required");
       }
       if (!buttonConfig.command) {
-        console.error(`Button ${buttonConfig.id} missing command`);
+        const error = `Button ${buttonConfig.id} missing command`;
+        this.debugLog(error);
         throw new Error("Button command is required");
       }
 
@@ -378,22 +419,23 @@ export class StatusBarQuickActionsExtension {
         alignment,
         priority,
       );
-      console.log(
-        `Created status bar item for button ${buttonConfig.id} with alignment ${alignment} and priority ${priority}`,
+      this.debugLog(
+        `Created status bar item for ${buttonConfig.id} (alignment: ${alignment}, priority: ${priority})`,
       );
 
       // Set button properties
       const displayText = this.getButtonDisplayText(buttonConfig);
-      console.log(`Button ${buttonConfig.id} display text: "${displayText}"`);
+      this.debugLog(`Button ${buttonConfig.id} display text: "${displayText}"`);
       if (!displayText || displayText.trim() === "") {
-        console.error(`Button ${buttonConfig.id} has empty display text`);
+        const error = `Button ${buttonConfig.id} has empty display text`;
+        this.debugLog(error);
         throw new Error("Button display text cannot be empty");
       }
       statusBarItem.text = displayText;
       statusBarItem.tooltip =
         buttonConfig.tooltip || buttonConfig.text || "Quick Action";
       statusBarItem.command = `statusbarQuickActions.execute_${buttonConfig.id}`;
-      console.log(
+      this.debugLog(
         `Button ${buttonConfig.id} command: ${statusBarItem.command}`,
       );
 
@@ -409,15 +451,12 @@ export class StatusBarQuickActionsExtension {
         role: "button",
       };
 
-      // Load history for this button
-      const history = await this.loadHistory(buttonConfig.id);
-
-      // Create complete button state
+      // Create button state with empty history (will be loaded async)
       const buttonState: ButtonState = {
         item: statusBarItem,
         config: buttonConfig,
         isExecuting: false,
-        history: history,
+        history: [], // Start with empty history, load async
         accessibility: {
           role: "button",
           ariaLabel:
@@ -431,17 +470,29 @@ export class StatusBarQuickActionsExtension {
       this.buttonStates.set(buttonConfig.id, buttonState);
       this.disposables.push(statusBarItem);
 
-      // Initialize dynamic label if configured
-      if (buttonConfig.dynamicLabel) {
-        await this.refreshButtonLabel(buttonConfig.id);
-      }
-
+      // Show button immediately (don't block on history or dynamic labels)
       statusBarItem.show();
 
-      console.log(`Button ${buttonConfig.id} shown successfully`);
-      console.log(
-        `Successfully created button: ${buttonConfig.id} (${buttonConfig.text})`,
-      );
+      // Load history and dynamic labels asynchronously (non-blocking)
+      setImmediate(() => {
+        this.loadHistoryAsync(buttonConfig.id).catch((error) => {
+          this.debugLog(
+            `Failed to load history for ${buttonConfig.id}:`,
+            error,
+          );
+        });
+
+        if (buttonConfig.dynamicLabel) {
+          this.refreshButtonLabel(buttonConfig.id).catch((error) => {
+            this.debugLog(
+              `Failed to refresh label for ${buttonConfig.id}:`,
+              error,
+            );
+          });
+        }
+      });
+
+      this.debugLog(`Button ${buttonConfig.id} created and shown`);
       return true;
     } catch (error) {
       const errorMessage =
@@ -1180,6 +1231,20 @@ export class StatusBarQuickActionsExtension {
       console.error(`Failed to load history for button ${buttonId}:`, error);
       return [];
     }
+  }
+
+  /**
+   * Load history asynchronously and update button state
+   */
+  private async loadHistoryAsync(buttonId: string): Promise<void> {
+    const buttonState = this.buttonStates.get(buttonId);
+    if (!buttonState) {
+      return;
+    }
+
+    const history = await this.loadHistory(buttonId);
+    buttonState.history = history;
+    this.debugLog(`History loaded for ${buttonId}: ${history.length} entries`);
   }
 
   /**
