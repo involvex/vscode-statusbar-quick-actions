@@ -546,7 +546,10 @@
     "test": "echo \"No tests specified\" && exit 0",
     "install:deps": "bun install",
     "dev:cli": "bun run src/config-cli.ts",
-    "debug": "bun run  --inspect-brk compile"
+    "debug": "bun run  --inspect-brk compile",
+    "publish:extension": "bun run package && vsce publish",
+    "publish:extension:prerelease": "bun run package:prerelease && vsce publish --pre-release",
+    "publish:cli": "bun run package && npm publish --access public"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
