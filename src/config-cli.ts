@@ -67,6 +67,23 @@ interface Preset {
   };
 }
 
+/** Label preset definition */
+interface LabelPreset {
+  name: string;
+  description: string;
+  config: {
+    type: "time" | "url" | "env" | "git" | "custom";
+    format?: string;
+    url?: string;
+    envVar?: string;
+    gitInfo?: "branch" | "status" | "remote";
+    customFunction?: string;
+    refreshInterval?: number;
+    fallback?: string;
+    template?: string;
+  };
+}
+
 // ============================================================================
 // CONSTANTS AND CONFIGURATION
 // ============================================================================
@@ -207,6 +224,75 @@ const BUILTIN_PRESETS: Record<string, Preset> = {
   },
 };
 
+/** Label presets for dynamic button text */
+const LABEL_PRESETS: Record<string, LabelPreset> = {
+  "git-branch": {
+    name: "Git Branch",
+    description: "Show current git branch",
+    config: {
+      type: "git",
+      gitInfo: "branch",
+      template: "$(git-branch) ${value}",
+      fallback: "$(git-branch) No Git",
+      refreshInterval: 5000,
+    },
+  },
+  "git-status": {
+    name: "Git Status",
+    description: "Show git repository status",
+    config: {
+      type: "git",
+      gitInfo: "status",
+      template: "$(git-commit) ${value}",
+      fallback: "$(git-commit) Clean",
+      refreshInterval: 5000,
+    },
+  },
+  "git-remote": {
+    name: "Git Remote URL",
+    description: "Show git remote origin URL",
+    config: {
+      type: "git",
+      gitInfo: "remote",
+      template: "$(globe) ${value}",
+      fallback: "$(globe) No Remote",
+      refreshInterval: 30000,
+    },
+  },
+  "npm-version": {
+    name: "NPM Package Version",
+    description: "Show latest package version from npm registry",
+    config: {
+      type: "url",
+      url: "https://registry.npmjs.org/${packageName}/latest",
+      template: "$(package) v${value.version}",
+      fallback: "$(package) Unknown",
+      refreshInterval: 300000, // 5 minutes
+    },
+  },
+  "current-time": {
+    name: "Current Time",
+    description: "Show current time",
+    config: {
+      type: "time",
+      format: "HH:mm:ss",
+      template: "$(clock) ${value}",
+      refreshInterval: 1000,
+    },
+  },
+  "env-variable": {
+    name: "Environment Variable",
+    description: "Show an environment variable value",
+    config: {
+      type: "env",
+      envVar: "NODE_ENV",
+      template: "$(symbol-property) ${value}",
+      fallback: "$(symbol-property) Not Set",
+      refreshInterval: 0,
+    },
+  },
+};
+
 /** Menu options with enhanced descriptions */
 const MENU_OPTIONS: readonly MenuOption[] = [
   {
@@ -260,13 +346,27 @@ const MENU_OPTIONS: readonly MenuOption[] = [
   },
   {
     key: "8",
+    label: "Apply Label Preset",
+    description: "Apply dynamic label preset to a button",
+    action: applyLabelPreset,
+    requiresConfirmation: false,
+  },
+  {
+    key: "9",
+    label: "Configure Performance",
+    description: "Adjust performance settings (caching, debounce)",
+    action: configurePerformance,
+    requiresConfirmation: false,
+  },
+  {
+    key: "10",
     label: "Reset to Defaults",
     description: "Reset all settings to default values",
     action: resetToDefaults,
     requiresConfirmation: true,
   },
   {
-    key: "9",
+    key: "11",
     label: "Help",
     description: "Show help and usage information",
     action: showHelp,
@@ -521,6 +621,42 @@ class SettingsManager {
   static setDebugMode(location: SettingsLocation, enabled: boolean): void {
     const settings = this.readSettings(location);
     settings["statusbarQuickActions.settings.debug"] = enabled;
+    this.writeSettings(location, settings);
+  }
+
+  static getPerformanceSettings(location: SettingsLocation): {
+    visibilityDebounceMs: number;
+    enableVirtualization: boolean;
+    cacheResults: boolean;
+  } {
+    const settings = this.readSettings(location);
+    const performance = settings[
+      "statusbarQuickActions.settings.performance"
+    ] as
+      | {
+          visibilityDebounceMs?: number;
+          enableVirtualization?: boolean;
+          cacheResults?: boolean;
+        }
+      | undefined;
+
+    return {
+      visibilityDebounceMs: performance?.visibilityDebounceMs ?? 300,
+      enableVirtualization: performance?.enableVirtualization ?? false,
+      cacheResults: performance?.cacheResults ?? true,
+    };
+  }
+
+  static setPerformanceSettings(
+    location: SettingsLocation,
+    performance: {
+      visibilityDebounceMs: number;
+      enableVirtualization: boolean;
+      cacheResults: boolean;
+    },
+  ): void {
+    const settings = this.readSettings(location);
+    settings["statusbarQuickActions.settings.performance"] = performance;
     this.writeSettings(location, settings);
   }
 }
@@ -1055,6 +1191,231 @@ async function resetToDefaults(): Promise<void> {
   SettingsManager.setDebugMode(location, false);
 
   ConsoleUI.printSuccess(`${location} settings reset to defaults`);
+}
+
+/** Apply label preset to a button */
+async function applyLabelPreset(): Promise<void> {
+  ConsoleUI.clear();
+  ConsoleUI.printBanner();
+
+  const location = await InputHandler.promptLocation();
+  const buttons = SettingsManager.getButtons(location);
+
+  if (buttons.length === 0) {
+    ConsoleUI.printWarning("No buttons available. Add a button first.");
+    return;
+  }
+
+  // Select button
+  console.log("Select button to apply label preset:\n");
+  buttons.forEach((btn, idx) => {
+    console.log(`  ${idx + 1}. ${btn.text} (${btn.id})`);
+  });
+  console.log(`\nChoice (1-${buttons.length}): `);
+
+  const buttonInput = await InputHandler.getInput(10000);
+  if (!buttonInput) {
+    ConsoleUI.printWarning("Operation cancelled");
+    return;
+  }
+
+  const buttonIndex = parseInt(buttonInput, 10) - 1;
+  if (buttonIndex < 0 || buttonIndex >= buttons.length) {
+    ConsoleUI.printError("Invalid button selection");
+    return;
+  }
+
+  // Show available presets
+  console.log("\nAvailable Label Presets:\n");
+  const presetKeys = Object.keys(LABEL_PRESETS);
+  presetKeys.forEach((key, idx) => {
+    const preset = LABEL_PRESETS[key];
+    console.log(`  ${idx + 1}. ${preset.name}`);
+    console.log(
+      `     ${CONFIG.colors.dim}${preset.description}${CONFIG.colors.reset}`,
+    );
+    console.log(
+      `     ${CONFIG.colors.dim}Refresh: ${preset.config.refreshInterval || 0}ms${CONFIG.colors.reset}`,
+    );
+    console.log();
+  });
+
+  console.log(`Select preset (1-${presetKeys.length}): `);
+  const presetInput = await InputHandler.getInput(10000);
+
+  if (!presetInput) {
+    ConsoleUI.printWarning("Operation cancelled");
+    return;
+  }
+
+  const presetIndex = parseInt(presetInput, 10) - 1;
+  if (presetIndex < 0 || presetIndex >= presetKeys.length) {
+    ConsoleUI.printError("Invalid preset selection");
+    return;
+  }
+
+  const presetKey = presetKeys[presetIndex];
+  const preset = LABEL_PRESETS[presetKey];
+
+  // Apply preset to button
+  const button = buttons[buttonIndex];
+
+  // For npm-version preset, ask for package name
+  if (presetKey === "npm-version") {
+    console.log("\nPackage name to monitor: ");
+    const packageName = await InputHandler.getInput(10000);
+    if (!packageName) {
+      ConsoleUI.printWarning("Operation cancelled");
+      return;
+    }
+    preset.config.url = preset.config.url?.replace(
+      "${packageName}",
+      packageName,
+    );
+  }
+
+  // For env-variable preset, ask for variable name
+  if (presetKey === "env-variable") {
+    console.log("\nEnvironment variable name: ");
+    const envVar = await InputHandler.getInput(10000);
+    if (!envVar) {
+      ConsoleUI.printWarning("Operation cancelled");
+      return;
+    }
+    preset.config.envVar = envVar;
+  }
+
+  button.dynamicLabel = preset.config;
+
+  // Update button in settings
+  buttons[buttonIndex] = button;
+  SettingsManager.setButtons(location, buttons);
+
+  ConsoleUI.printSuccess(
+    `Label preset "${preset.name}" applied to button "${button.text}"`,
+  );
+}
+
+/** Configure performance settings */
+async function configurePerformance(): Promise<void> {
+  ConsoleUI.clear();
+  ConsoleUI.printBanner();
+
+  const location = await InputHandler.promptLocation();
+  const currentSettings = SettingsManager.getPerformanceSettings(location);
+
+  ConsoleUI.printDivider();
+  console.log("Current Performance Settings");
+  ConsoleUI.printDivider();
+  console.log();
+  console.log(`Visibility Debounce: ${currentSettings.visibilityDebounceMs}ms`);
+  console.log(
+    `Virtualization: ${currentSettings.enableVirtualization ? "✅ Enabled" : "❌ Disabled"}`,
+  );
+  console.log(
+    `Result Caching: ${currentSettings.cacheResults ? "✅ Enabled" : "❌ Disabled"}`,
+  );
+  console.log();
+
+  ConsoleUI.printDivider();
+  console.log("What would you like to configure?\n");
+  console.log("  1. Visibility Debounce (delay before checking visibility)");
+  console.log("  2. Enable/Disable Virtualization (for large button lists)");
+  console.log("  3. Enable/Disable Result Caching");
+  console.log("  4. Apply Performance Preset");
+  console.log("  5. Cancel");
+  console.log("\nChoice (1-5): ");
+
+  const choice = await InputHandler.getInput(10000);
+
+  if (!choice || choice === "5") {
+    ConsoleUI.printWarning("Operation cancelled");
+    return;
+  }
+
+  const newSettings = { ...currentSettings };
+
+  switch (choice) {
+    case "1": {
+      console.log("\nVisibility Debounce in milliseconds (current: ");
+      console.log(`${currentSettings.visibilityDebounceMs}ms): `);
+      const input = await InputHandler.getInput(10000);
+      if (input) {
+        const debounce = parseInt(input, 10);
+        if (!isNaN(debounce) && debounce >= 0 && debounce <= 5000) {
+          newSettings.visibilityDebounceMs = debounce;
+        } else {
+          ConsoleUI.printError("Invalid debounce value (0-5000ms)");
+          return;
+        }
+      }
+      break;
+    }
+    case "2": {
+      newSettings.enableVirtualization = !currentSettings.enableVirtualization;
+      ConsoleUI.printInfo(
+        `Virtualization ${newSettings.enableVirtualization ? "enabled" : "disabled"}`,
+      );
+      break;
+    }
+    case "3": {
+      newSettings.cacheResults = !currentSettings.cacheResults;
+      ConsoleUI.printInfo(
+        `Result caching ${newSettings.cacheResults ? "enabled" : "disabled"}`,
+      );
+      break;
+    }
+    case "4": {
+      console.log("\nPerformance Presets:\n");
+      console.log("  1. Balanced (300ms debounce, caching on)");
+      console.log("  2. Fast (100ms debounce, caching on, virtualization on)");
+      console.log("  3. Minimal (0ms debounce, caching off)");
+      console.log("\nChoice (1-3): ");
+
+      const presetChoice = await InputHandler.getInput(10000);
+
+      switch (presetChoice) {
+        case "1":
+          newSettings.visibilityDebounceMs = 300;
+          newSettings.cacheResults = true;
+          newSettings.enableVirtualization = false;
+          break;
+        case "2":
+          newSettings.visibilityDebounceMs = 100;
+          newSettings.cacheResults = true;
+          newSettings.enableVirtualization = true;
+          break;
+        case "3":
+          newSettings.visibilityDebounceMs = 0;
+          newSettings.cacheResults = false;
+          newSettings.enableVirtualization = false;
+          break;
+        default:
+          ConsoleUI.printError("Invalid preset choice");
+          return;
+      }
+      break;
+    }
+    default:
+      ConsoleUI.printError("Invalid choice");
+      return;
+  }
+
+  SettingsManager.setPerformanceSettings(location, newSettings);
+  ConsoleUI.printSuccess("Performance settings updated");
+
+  console.log();
+  ConsoleUI.printDivider();
+  console.log("New Settings:");
+  ConsoleUI.printDivider();
+  console.log(`Visibility Debounce: ${newSettings.visibilityDebounceMs}ms`);
+  console.log(
+    `Virtualization: ${newSettings.enableVirtualization ? "✅ Enabled" : "❌ Disabled"}`,
+  );
+  console.log(
+    `Result Caching: ${newSettings.cacheResults ? "✅ Enabled" : "❌ Disabled"}`,
+  );
+  console.log();
 }
 
 /** Enhanced help system */

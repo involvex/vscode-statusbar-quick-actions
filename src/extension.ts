@@ -42,6 +42,11 @@ export class StatusBarQuickActionsExtension {
   private editorChangeListener: vscode.Disposable | null = null;
   private isActivated = false;
   private debugMode = false;
+  private configChangeTimer?: NodeJS.Timeout;
+  private visibilityCheckCache = new Map<
+    string,
+    { result: boolean; timestamp: number }
+  >();
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -90,6 +95,16 @@ export class StatusBarQuickActionsExtension {
       setImmediate(() => {
         this.showWelcomeMessageIfNeeded().catch((error) => {
           this.debugLog("Failed to show welcome message:", error);
+        });
+
+        // Set up periodic cache cleanup (every 5 minutes)
+        const cleanupInterval = setInterval(() => {
+          this.cleanupStaleCache();
+        }, 300000); // 5 minutes
+
+        // Dispose cleanup interval on deactivation
+        this.disposables.push({
+          dispose: () => clearInterval(cleanupInterval),
         });
       });
     } catch (error) {
@@ -275,17 +290,27 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
-   * Set up configuration change watching
+   * Set up configuration change watching with debouncing
    */
   private setupConfigurationWatching(): void {
     this.disposables.push(
       this.configManager.onConfigurationChanged(async (newConfig) => {
-        // Update debug mode when configuration changes
+        // Clear existing timer
+        if (this.configChangeTimer) {
+          clearTimeout(this.configChangeTimer);
+        }
+
+        // Update debug mode immediately
         this.debugMode = vscode.workspace
           .getConfiguration("statusbarQuickActions.settings")
           .get<boolean>("debug", false);
-        this.debugLog("Configuration changed, updating buttons");
-        await this.updateConfiguration(newConfig);
+
+        // Debounce configuration updates to avoid rapid re-renders
+        this.configChangeTimer = setTimeout(async () => {
+          this.debugLog("Configuration changed, updating buttons");
+          await this.updateConfiguration(newConfig);
+          this.configChangeTimer = undefined;
+        }, 500); // 500ms debounce
       }),
     );
   }
@@ -1248,6 +1273,25 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
+   * Clean up stale cache entries to reduce memory usage
+   */
+  private cleanupStaleCache(): void {
+    const now = Date.now();
+    const maxAge = 60000; // 1 minute
+
+    // Clean up visibility cache
+    this.visibilityCheckCache.forEach((value, key) => {
+      if (now - value.timestamp > maxAge) {
+        this.visibilityCheckCache.delete(key);
+      }
+    });
+
+    this.debugLog(
+      `Cache cleanup: ${this.visibilityCheckCache.size} entries remaining`,
+    );
+  }
+
+  /**
    * Get all history entries across all buttons
    */
   private async getAllHistory(): Promise<Map<string, ExecutionResult[]>> {
@@ -1401,30 +1445,78 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
-   * Setup editor change listener for debounced visibility checks
+   * Setup editor change listener for optimized visibility checks
    */
   private setupEditorChangeListener(): void {
     this.editorChangeListener = vscode.window.onDidChangeActiveTextEditor(
-      () => {
-        // Debounced visibility check for all buttons
-        this.buttonStates.forEach((buttonState, buttonId) => {
-          if (buttonState.config.visibility) {
-            const customDebounce = buttonState.config.visibility.debounceMs;
+      (editor) => {
+        // Early return if no editor
+        if (!editor) {
+          return;
+        }
 
-            this.visibilityManager.checkVisibilityDebounced(
-              buttonId,
-              buttonState.config.visibility,
-              customDebounce,
-              (isVisible) => {
-                // Update button visibility
-                if (isVisible) {
-                  buttonState.item.show();
-                } else {
-                  buttonState.item.hide();
-                }
-              },
-            );
+        // Get performance config for caching settings
+        const performanceConfig = this.configManager.getConfigValue(
+          "settings.performance",
+          this.getDefaultPerformanceConfig(),
+        );
+
+        const now = Date.now();
+        const cacheTimeout = 1000; // 1 second cache
+
+        // Batch process visibility checks for buttons with visibility conditions
+        const buttonsToCheck: {
+          buttonId: string;
+          buttonState: ButtonState;
+        }[] = [];
+
+        this.buttonStates.forEach((buttonState, buttonId) => {
+          if (!buttonState.config.visibility) {
+            return; // Skip buttons without visibility conditions
           }
+
+          // Check cache if caching is enabled
+          if (performanceConfig.cacheResults) {
+            const cached = this.visibilityCheckCache.get(buttonId);
+            if (cached && now - cached.timestamp < cacheTimeout) {
+              // Use cached result
+              if (cached.result) {
+                buttonState.item.show();
+              } else {
+                buttonState.item.hide();
+              }
+              return;
+            }
+          }
+
+          buttonsToCheck.push({ buttonId, buttonState });
+        });
+
+        // Process batched checks
+        buttonsToCheck.forEach(({ buttonId, buttonState }) => {
+          const customDebounce = buttonState.config.visibility!.debounceMs;
+
+          this.visibilityManager.checkVisibilityDebounced(
+            buttonId,
+            buttonState.config.visibility!,
+            customDebounce,
+            (isVisible) => {
+              // Update cache
+              if (performanceConfig.cacheResults) {
+                this.visibilityCheckCache.set(buttonId, {
+                  result: isVisible,
+                  timestamp: now,
+                });
+              }
+
+              // Update button visibility
+              if (isVisible) {
+                buttonState.item.show();
+              } else {
+                buttonState.item.hide();
+              }
+            },
+          );
         });
       },
     );
