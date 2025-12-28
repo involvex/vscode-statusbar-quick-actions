@@ -2,7 +2,7 @@
   "name": "statusbar-quick-actions",
   "displayName": "StatusBar Quick Actions",
   "description": "Highly customizable statusbar buttons for executing user-defined scripts and commands with advanced features including theme support, execution tracking, and intelligent visibility conditions.",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "publisher": "involvex",
   "author": {
     "name": "involvex"
@@ -549,7 +549,8 @@
     "debug": "bun run  --inspect-brk compile",
     "publish:extension": "bun run package && vsce publish",
     "publish:extension:prerelease": "bun run package:prerelease && vsce publish --pre-release",
-    "publish:cli": "bun run package && npm publish --access public"
+    "publish:cli": "bun run package && npm publish --access public",
+    "changelog": "bun run src/utils/changelog.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
