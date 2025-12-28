@@ -7,3 +7,4 @@ node_modules
 statusbar-quick-actions-*.vsix
 *.vsix
 dist
+coverage

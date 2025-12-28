@@ -38,4 +38,20 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Test files configuration - relax strict typing rules for mocking infrastructure
+    files: ["src/test/**/*.ts", "src/test/**/*.mts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
+  },
 );

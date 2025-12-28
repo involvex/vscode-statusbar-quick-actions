@@ -15,5 +15,12 @@
     "inlineSourceMap": false,
     "removeComments": true
   },
-  "exclude": ["node_modules", ".vscode-test"]
+  "exclude": [
+    "node_modules",
+    ".vscode-test",
+    "src/test/**/*.test.ts",
+    "src/test/**/*.spec.ts",
+    "src/test/e2e/**",
+    "src/test/setup.ts"
+  ]
 }

@@ -366,3 +366,185 @@ export interface DynamicLabelState {
   refreshTimer?: NodeJS.Timeout;
   error?: string;
 }
+
+/**
+ * Diagnostic issue severity levels
+ */
+export type DiagnosticSeverity = "error" | "warning" | "info" | "performance";
+
+/**
+ * Diagnostic issue category
+ */
+export type DiagnosticCategory =
+  | "configuration"
+  | "performance"
+  | "compatibility"
+  | "memory"
+  | "startup"
+  | "execution"
+  | "validation"
+  | "extension";
+
+/**
+ * Configuration validation issue
+ */
+export interface DiagnosticIssue {
+  id: string;
+  category: DiagnosticCategory;
+  severity: DiagnosticSeverity;
+  title: string;
+  description: string;
+  affectedButtons?: string[];
+  autoFixable?: boolean;
+  fixAction?: () => Promise<void>;
+  recommendation?: string;
+  code?: string;
+  details?: Record<string, unknown>;
+}
+
+/**
+ * Performance metrics for extension operations
+ */
+export interface PerformanceMetrics {
+  startupTime: number; // milliseconds
+  memoryUsage: {
+    used: number; // bytes
+    total: number; // bytes
+    percentage: number;
+  };
+  commandExecutionLatency: {
+    average: number;
+    min: number;
+    max: number;
+    last: number;
+    samples: number;
+  };
+  configurationLoadTime: number;
+  buttonCreationTime: number;
+  historyQueriesPerMinute: number;
+  cacheHitRate: number;
+  timestamp: Date;
+}
+
+/**
+ * Diagnostic context and environment information
+ */
+export interface DiagnosticContext {
+  extensionVersion: string;
+  vscodeVersion: string;
+  platform: string;
+  architecture: string;
+  workspacePath?: string;
+  userSettings: Record<string, unknown>;
+  workspaceSettings: Record<string, unknown>;
+  installedExtensions: string[];
+  activeExtensions: string[];
+  buttonCount: number;
+  configurationSize: number; // bytes
+  workspaceFolders: number;
+  timestamp: Date;
+}
+
+/**
+ * Performance trend analysis
+ */
+export interface TrendAnalysis {
+  metric: string;
+  direction: "improving" | "degrading" | "stable";
+  changePercent: number;
+  confidence: number; // 0-1
+  period: string; // e.g., "24h", "7d"
+  baseline?: number;
+  currentValue: number;
+  description: string;
+}
+
+/**
+ * Performance anomaly detection result
+ */
+export interface AnomalyDetection {
+  metric: string;
+  isAnomaly: boolean;
+  anomalyScore: number; // 0-1
+  severity: "low" | "medium" | "high" | "critical";
+  description: string;
+  expectedRange: {
+    min: number;
+    max: number;
+  };
+  actualValue: number;
+  timestamp: Date;
+  recommendation?: string;
+}
+
+/**
+ * Complete diagnostic report
+ */
+export interface DiagnosticReport {
+  id: string;
+  timestamp: Date;
+  context: DiagnosticContext;
+  issues: DiagnosticIssue[];
+  performance: PerformanceMetrics;
+  trends: TrendAnalysis[];
+  anomalies: AnomalyDetection[];
+  recommendations: string[];
+  summary: {
+    totalIssues: number;
+    criticalIssues: number;
+    autoFixableIssues: number;
+    performanceScore: number; // 0-100
+    healthStatus: "excellent" | "good" | "fair" | "poor" | "critical";
+    requiresRestart?: boolean;
+  };
+}
+
+/**
+ * Doctor command options
+ */
+export interface DoctorOptions {
+  verbose?: boolean;
+  interactive?: boolean;
+  exportReport?: boolean;
+  fixIssues?: boolean;
+  performanceTest?: boolean;
+  includeTrends?: boolean;
+  includeAnomalies?: boolean;
+  outputPath?: string;
+  categories?: DiagnosticCategory[];
+}
+
+/**
+ * System information for diagnostics
+ */
+export interface SystemInfo {
+  os: {
+    platform: string;
+    release: string;
+    arch: string;
+    type: string;
+  };
+  node: {
+    version: string;
+    arch: string;
+    platform: string;
+  };
+  vscode: {
+    version: string;
+    commit: string;
+    date: string;
+    electronVersion: string;
+    architecture: string;
+  };
+  memory: {
+    total: number;
+    free: number;
+    used: number;
+    percentage: number;
+  };
+  cpu: {
+    model: string;
+    speed: number;
+    count: number;
+  };
+}

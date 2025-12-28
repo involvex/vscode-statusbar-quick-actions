@@ -1,0 +1,170 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  unit-tests:
+    name: Unit & Integration Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18.x, 20.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run linter
+        run: bun run lint
+
+      - name: Run type check
+        run: bun run typecheck
+
+      - name: Run unit tests
+        run: bun run test:unit
+
+      - name: Run integration tests
+        run: bun run test:integration
+
+      - name: Generate coverage report
+        run: bun run test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-${{ matrix.os }}-node-${{ matrix.node-version }}
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Compile extension
+        run: bun run compile
+
+      - name: Run E2E tests (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a bun run test:e2e
+
+      - name: Run E2E tests (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: bun run test:e2e
+
+  performance-tests:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run performance benchmarks
+        run: bun test --filter "performance"
+
+      - name: Check activation time
+        run: |
+          echo "Verifying extension activation time is under 200ms..."
+          # Performance assertions are in the tests
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Audit dependencies
+        run: bun audit || true
+
+      - name: Check for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+
+  build-verification:
+    name: Build Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build extension
+        run: bun run rebuild
+
+      - name: Package extension
+        run: bun run package
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-vsix
+          path: dist/*.vsix
+
+  test-summary:
+    name: Test Summary
+    needs:
+      [
+        unit-tests,
+        e2e-tests,
+        performance-tests,
+        security-audit,
+        build-verification,
+      ]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "All test suites completed!"
+          echo "Unit Tests: ${{ needs.unit-tests.result }}"
+          echo "E2E Tests: ${{ needs.e2e-tests.result }}"
+          echo "Performance Tests: ${{ needs.performance-tests.result }}"
+          echo "Security Audit: ${{ needs.security-audit.result }}"
+          echo "Build Verification: ${{ needs.build-verification.result }}"

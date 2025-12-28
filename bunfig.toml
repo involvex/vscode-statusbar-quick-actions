@@ -1,0 +1,11 @@
+# Bun Test Configuration
+[test]
+preload = ["./src/test/setup.ts"]
+coverage = true
+coverageThreshold = 80
+coverageReporter = ["text", "lcov"]
+coverageDirectory = "./coverage"
+
+# Test patterns
+# Run all .test.ts files
+root = "./src"
