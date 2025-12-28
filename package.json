@@ -2,7 +2,7 @@
   "name": "statusbar-quick-actions",
   "displayName": "StatusBar Quick Actions",
   "description": "Highly customizable statusbar buttons for executing user-defined scripts and commands with advanced features including theme support, execution tracking, and intelligent visibility conditions.",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "publisher": "involvex",
   "author": {
     "name": "involvex"
