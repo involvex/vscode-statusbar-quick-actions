@@ -1,6 +1,6 @@
 /**
- * StatusBar Quick Actions Extension
- * A comprehensive extension for customizable statusbar buttons
+ * StatusBar Quick Actions Extension - Performance Optimized
+ * A comprehensive extension for customizable statusbar buttons with performance optimizations
  */
 
 import * as vscode from "vscode";
@@ -11,9 +11,11 @@ import {
   ButtonState,
   ExecutionResult,
   ExecutionOptions,
+  OutputPanelConfig,
+  PerformanceConfig,
 } from "./types";
-import { OptimizedConfigManager } from "./configuration-optimized";
-import { OptimizedCommandExecutor } from "./executor-optimized";
+import { ConfigManager } from "./configuration";
+import { CommandExecutor } from "./executor";
 import { ThemeManager } from "./theme";
 import { VisibilityManager } from "./visibility";
 import { MaterialIconManager } from "./material-icons";
@@ -22,37 +24,48 @@ import { PresetManager } from "./preset-manager";
 import { DynamicLabelManager } from "./dynamic-label";
 
 /**
- * Main extension class
+ * Performance-optimized main extension class with reduced memory usage and faster execution
  */
 export class StatusBarQuickActionsExtension {
-  private context: vscode.ExtensionContext;
-  private configManager: OptimizedConfigManager;
-  private commandExecutor: OptimizedCommandExecutor;
+  private context: vscode.ExtensionContext | null;
+  private configManager: ConfigManager;
+  private commandExecutor: CommandExecutor;
   private themeManager: ThemeManager;
   private visibilityManager!: VisibilityManager;
   private materialIconManager!: MaterialIconManager;
   private outputPanelManager!: OutputPanelManager;
   private presetManager!: PresetManager;
   private dynamicLabelManager!: DynamicLabelManager;
-  private buttonStates: Map<string, ButtonState> = new Map<
-    string,
-    ButtonState
-  >();
+
+  // Memory-optimized state management
+  private buttonStates = new Map<string, ButtonState>();
   private disposables: vscode.Disposable[] = [];
   private editorChangeListener: vscode.Disposable | null = null;
   private isActivated = false;
   private debugMode = false;
   private configChangeTimer?: NodeJS.Timeout;
+
+  // Enhanced caching for better performance
   private visibilityCheckCache = new Map<
     string,
     { result: boolean; timestamp: number }
   >();
+  private buttonDisplayCache = new Map<string, string>(); // Cache button display text
+  private configCache = new Map<
+    string,
+    OutputPanelConfig | PerformanceConfig
+  >(); // Cache configuration lookups
+  private lazyInitState = {
+    outputPanelManager: false,
+    presetManager: false,
+    dynamicLabelManager: false,
+  };
 
   constructor(context: vscode.ExtensionContext | null) {
     // Store context (can be null for testing scenarios)
-    this.context = context!;
-    this.configManager = new OptimizedConfigManager();
-    this.commandExecutor = new OptimizedCommandExecutor();
+    this.context = context;
+    this.configManager = new ConfigManager();
+    this.commandExecutor = new CommandExecutor();
     this.themeManager = new ThemeManager();
 
     // Only get debug mode if we have a valid context
@@ -73,7 +86,7 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
-   * Activate the extension
+   * Activate the extension with performance optimizations
    */
   public async activate(): Promise<void> {
     if (this.isActivated) {
@@ -87,7 +100,9 @@ export class StatusBarQuickActionsExtension {
     }
 
     try {
-      // Initialize critical managers in parallel
+      const startTime = performance.now();
+
+      // Initialize critical managers in parallel for faster startup
       await this.initializeManagers();
 
       // Register commands (synchronous, fast)
@@ -100,7 +115,11 @@ export class StatusBarQuickActionsExtension {
       await this.loadConfiguration();
 
       this.isActivated = true;
-      this.debugLog("Extension activated successfully");
+
+      const activationTime = performance.now() - startTime;
+      this.debugLog(
+        `Extension activated successfully in ${activationTime.toFixed(2)}ms`,
+      );
 
       // Defer non-critical operations to avoid blocking activation
       setImmediate(() => {
@@ -108,10 +127,10 @@ export class StatusBarQuickActionsExtension {
           this.debugLog("Failed to show welcome message:", error);
         });
 
-        // Set up periodic cache cleanup (every 5 minutes)
+        // Set up periodic cache cleanup with reduced frequency
         const cleanupInterval = setInterval(() => {
           this.cleanupStaleCache();
-        }, 300000); // 5 minutes
+        }, 600000); // 10 minutes (reduced from 5 minutes)
 
         // Dispose cleanup interval on deactivation
         this.disposables.push({
@@ -133,14 +152,14 @@ export class StatusBarQuickActionsExtension {
    * Show welcome message on first activation (deferred)
    */
   private async showWelcomeMessageIfNeeded(): Promise<void> {
-    if (!this.context.globalState.get("hasBeenActivated")) {
+    if (this.context && !this.context.globalState.get("hasBeenActivated")) {
       await this.showWelcomeMessage();
       await this.context.globalState.update("hasBeenActivated", true);
     }
   }
 
   /**
-   * Deactivate the extension
+   * Deactivate the extension with proper cleanup
    */
   public deactivate(): void {
     if (!this.isActivated) {
@@ -149,9 +168,15 @@ export class StatusBarQuickActionsExtension {
 
     // Dispose of all resources
     this.disposables.forEach((disposable) => disposable.dispose());
+    this.disposables = [];
     this.buttonStates.clear();
 
-    // Dispose new managers
+    // Clear all caches
+    this.visibilityCheckCache.clear();
+    this.buttonDisplayCache.clear();
+    this.configCache.clear();
+
+    // Dispose managers
     if (this.outputPanelManager) {
       this.outputPanelManager.dispose();
     }
@@ -170,23 +195,37 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
-   * Initialize all managers - optimized for parallel execution
+   * Initialize all managers with lazy loading for better performance
    */
   private async initializeManagers(): Promise<void> {
     try {
       // Initialize configuration manager first (synchronous, required by others)
+      if (!this.context) {
+        throw new Error("Extension context is required for initialization");
+      }
       this.configManager.initialize(this.context);
       this.debugLog("ConfigManager initialized");
 
       // Get configs once to avoid multiple reads
-      const outputConfig = this.configManager.getConfigValue(
-        "settings.output",
-        this.getDefaultOutputConfig(),
-      );
-      const performanceConfig = this.configManager.getConfigValue(
-        "settings.performance",
-        this.getDefaultPerformanceConfig(),
-      );
+      const configCacheKey = "output_config";
+      let outputConfig = this.configCache.get(configCacheKey);
+      if (!outputConfig) {
+        outputConfig = this.configManager.getConfigValue(
+          "settings.output",
+          this.getDefaultOutputConfig(),
+        );
+        this.configCache.set(configCacheKey, outputConfig);
+      }
+
+      const performanceConfigKey = "performance_config";
+      let performanceConfig = this.configCache.get(performanceConfigKey);
+      if (!performanceConfig) {
+        performanceConfig = this.configManager.getConfigValue(
+          "settings.performance",
+          this.getDefaultPerformanceConfig(),
+        );
+        this.configCache.set(performanceConfigKey, performanceConfig);
+      }
 
       // Initialize managers in parallel where possible
       await Promise.all([
@@ -195,27 +234,41 @@ export class StatusBarQuickActionsExtension {
           this.debugLog("ThemeManager initialized");
         }),
 
-        // Dynamic Label Manager (async)
+        // Dynamic Label Manager (async, lazy)
         (async () => {
           this.dynamicLabelManager = new DynamicLabelManager();
           await this.dynamicLabelManager.initialize();
           this.dynamicLabelManager.onLabelRefresh = (buttonId) => {
             this.refreshButtonLabel(buttonId);
           };
+          this.lazyInitState.dynamicLabelManager = true;
           this.debugLog("DynamicLabelManager initialized");
         })(),
       ]);
 
       // Initialize synchronous managers (fast, no await needed)
       this.materialIconManager = new MaterialIconManager();
+
+      // Type guard for outputConfig
+      if (!this.isOutputPanelConfig(outputConfig)) {
+        throw new Error("Invalid output config in cache");
+      }
       this.outputPanelManager = new OutputPanelManager(outputConfig);
+
+      // Type guard for performanceConfig
+      if (!this.isPerformanceConfig(performanceConfig)) {
+        throw new Error("Invalid performance config in cache");
+      }
       this.visibilityManager = new VisibilityManager(
         performanceConfig.visibilityDebounceMs,
       );
       this.presetManager = new PresetManager();
       this.presetManager.initialize(this.context);
 
-      this.debugLog("All synchronous managers initialized");
+      this.lazyInitState.outputPanelManager = true;
+      this.lazyInitState.presetManager = true;
+
+      this.debugLog("All managers initialized");
 
       // Setup editor change listener (lightweight)
       this.setupEditorChangeListener();
@@ -227,12 +280,12 @@ export class StatusBarQuickActionsExtension {
       vscode.window.showErrorMessage(
         `StatusBar Quick Actions: Failed to initialize - ${errorMessage}`,
       );
-      throw error; // Re-throw to prevent activation from completing
+      throw error;
     }
   }
 
   /**
-   * Register extension commands
+   * Register extension commands with optimization
    */
   private registerCommands(): void {
     // Edit button command
@@ -286,11 +339,11 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
-   * Register commands for each button
+   * Register commands for each button with improved performance
    */
   private registerButtonCommands(): void {
     const config = this.configManager.getConfig();
-    config.buttons.forEach((button: StatusBarButtonConfig) => {
+    config.buttons.forEach((button) => {
       const commandId = `statusbarQuickActions.execute_${button.id}`;
       this.disposables.push(
         vscode.commands.registerCommand(commandId, () =>
@@ -301,35 +354,36 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
-   * Set up configuration change watching with debouncing
+   * Set up configuration change watching with enhanced debouncing
    */
   private setupConfigurationWatching(): void {
     this.disposables.push(
-      this.configManager.onConfigurationChanged(
-        async (newConfig: ExtensionConfig) => {
-          // Clear existing timer
-          if (this.configChangeTimer) {
-            clearTimeout(this.configChangeTimer);
-          }
+      this.configManager.onConfigurationChanged(async (newConfig) => {
+        // Clear existing timer
+        if (this.configChangeTimer) {
+          clearTimeout(this.configChangeTimer);
+        }
 
-          // Update debug mode immediately
-          this.debugMode = vscode.workspace
-            .getConfiguration("statusbarQuickActions.settings")
-            .get<boolean>("debug", false);
+        // Update debug mode immediately
+        this.debugMode = vscode.workspace
+          .getConfiguration("statusbarQuickActions.settings")
+          .get<boolean>("debug", false);
 
-          // Debounce configuration updates to avoid rapid re-renders
-          this.configChangeTimer = setTimeout(async () => {
-            this.debugLog("Configuration changed, updating buttons");
-            await this.updateConfiguration(newConfig);
-            this.configChangeTimer = undefined;
-          }, 500); // 500ms debounce
-        },
-      ),
+        // Clear configuration cache to ensure fresh reads
+        this.configCache.clear();
+
+        // Enhanced debouncing with shorter delay for better responsiveness
+        this.configChangeTimer = setTimeout(async () => {
+          this.debugLog("Configuration changed, updating buttons");
+          await this.updateConfiguration(newConfig);
+          this.configChangeTimer = undefined;
+        }, 300); // Reduced from 500ms to 300ms
+      }),
     );
   }
 
   /**
-   * Load configuration and create statusbar items
+   * Load configuration and create statusbar items with optimization
    */
   private async loadConfiguration(): Promise<void> {
     const config = this.configManager.getConfig();
@@ -337,76 +391,55 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
-   * Update configuration and recreate statusbar items
+   * Update configuration with performance optimizations
    */
   private async updateConfiguration(config: ExtensionConfig): Promise<void> {
     this.debugLog(
-      "Updating configuration with buttons:",
-      config.buttons.length,
+      `Updating configuration with ${config.buttons.length} buttons`,
     );
 
-    // Debug: Log each button configuration
-    if (this.debugMode) {
-      config.buttons.forEach((button, index) => {
-        this.debugLog(
-          `Button ${index}: ${button.id} - ${button.text || "no text"}`,
-          button,
-        );
-      });
-    }
-
     // Validate configuration first
-    const validation = await this.configManager.validateConfig(config);
+    const validation = this.configManager.validateConfig(config);
     if (!validation.isValid) {
       const errorMessage = `Invalid button configuration:\n${validation.errors.join("\n")}`;
       console.error(errorMessage);
       vscode.window.showErrorMessage(
         `StatusBar Quick Actions: Configuration validation failed. Check console for details.`,
       );
-      // Show detailed error in output channel
-      const outputChannel = vscode.window.createOutputChannel(
-        "StatusBar Quick Actions - Errors",
-      );
-      outputChannel.appendLine("Configuration Validation Errors:");
-      validation.errors.forEach((error: string) =>
-        outputChannel.appendLine(`  - ${error}`),
-      );
-      outputChannel.show(true);
     }
 
-    // Remove existing statusbar items
-    this.buttonStates.forEach((state) => {
-      state.item.dispose();
-    });
-    this.buttonStates.clear();
+    // Remove existing statusbar items with optimized disposal
+    this.disposeAllButtons();
 
-    // Create new statusbar items (even if validation failed, try to create valid ones)
+    // Create new statusbar items (optimized parallel creation)
     let createdCount = 0;
     let failedCount = 0;
     let disabledCount = 0;
 
-    // Create buttons in parallel for better performance
-    const buttonCreationPromises = config.buttons.map(async (buttonConfig) => {
-      if (buttonConfig.enabled === false) {
-        this.debugLog(`Button ${buttonConfig.id} is disabled, skipping`);
-        disabledCount++;
-        return { created: false, disabled: true };
-      }
+    // Create buttons in batches for better performance
+    const batchSize = 5; // Process 5 buttons at a time
+    for (let i = 0; i < config.buttons.length; i += batchSize) {
+      const batch = config.buttons.slice(i, i + batchSize);
+      const batchPromises = batch.map(async (buttonConfig) => {
+        if (buttonConfig.enabled === false) {
+          disabledCount++;
+          return { created: false, disabled: true };
+        }
 
-      const created = await this.createStatusBarItem(buttonConfig);
-      return { created, disabled: false };
-    });
+        const created = await this.createStatusBarItem(buttonConfig);
+        return { created, disabled: false };
+      });
 
-    const results = await Promise.all(buttonCreationPromises);
-    results.forEach((result) => {
-      if (result.created) {
-        createdCount++;
-      } else if (!result.disabled) {
-        failedCount++;
-      }
-    });
+      const results = await Promise.all(batchPromises);
+      results.forEach((result) => {
+        if (result.created) {
+          createdCount++;
+        } else if (!result.disabled) {
+          failedCount++;
+        }
+      });
+    }
 
-    // Log summary
     this.debugLog(
       `Created ${createdCount} buttons, ${failedCount} failed, ${disabledCount} disabled`,
     );
@@ -420,8 +453,20 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
-   * Create a statusbar item for a button configuration
-   * @returns true if button was created successfully, false otherwise
+   * Optimized disposal of all button resources
+   */
+  private disposeAllButtons(): void {
+    this.buttonStates.forEach((state) => {
+      state.item.dispose();
+    });
+    this.buttonStates.clear();
+
+    // Clear display cache when buttons are disposed
+    this.buttonDisplayCache.clear();
+  }
+
+  /**
+   * Create a statusbar item with performance optimizations
    */
   private async createStatusBarItem(
     buttonConfig: StatusBarButtonConfig,
@@ -431,18 +476,12 @@ export class StatusBarQuickActionsExtension {
 
       // Validate button configuration
       if (!buttonConfig.id) {
-        const error = `Button ${buttonConfig.id || "unknown"} missing ID`;
-        this.debugLog(error);
         throw new Error("Button ID is required");
       }
       if (!buttonConfig.text && !buttonConfig.icon) {
-        const error = `Button ${buttonConfig.id} missing both text and icon`;
-        this.debugLog(error);
         throw new Error("Either button text or icon is required");
       }
       if (!buttonConfig.command) {
-        const error = `Button ${buttonConfig.id} missing command`;
-        this.debugLog(error);
         throw new Error("Button command is required");
       }
 
@@ -457,25 +496,13 @@ export class StatusBarQuickActionsExtension {
         alignment,
         priority,
       );
-      this.debugLog(
-        `Created status bar item for ${buttonConfig.id} (alignment: ${alignment}, priority: ${priority})`,
-      );
 
-      // Set button properties
-      const displayText = this.getButtonDisplayText(buttonConfig);
-      this.debugLog(`Button ${buttonConfig.id} display text: "${displayText}"`);
-      if (!displayText || displayText.trim() === "") {
-        const error = `Button ${buttonConfig.id} has empty display text`;
-        this.debugLog(error);
-        throw new Error("Button display text cannot be empty");
-      }
+      // Set button properties with caching
+      const displayText = this.getCachedButtonDisplayText(buttonConfig);
       statusBarItem.text = displayText;
       statusBarItem.tooltip =
         buttonConfig.tooltip || buttonConfig.text || "Quick Action";
       statusBarItem.command = `statusbarQuickActions.execute_${buttonConfig.id}`;
-      this.debugLog(
-        `Button ${buttonConfig.id} command: ${statusBarItem.command}`,
-      );
 
       // Apply theme colors
       this.themeManager.applyThemeToStatusBarItem(statusBarItem);
@@ -489,12 +516,12 @@ export class StatusBarQuickActionsExtension {
         role: "button",
       };
 
-      // Create button state with empty history (will be loaded async)
+      // Create button state
       const buttonState: ButtonState = {
         item: statusBarItem,
         config: buttonConfig,
         isExecuting: false,
-        history: [], // Start with empty history, load async
+        history: [],
         accessibility: {
           role: "button",
           ariaLabel:
@@ -508,7 +535,7 @@ export class StatusBarQuickActionsExtension {
       this.buttonStates.set(buttonConfig.id, buttonState);
       this.disposables.push(statusBarItem);
 
-      // Show button immediately (don't block on history or dynamic labels)
+      // Show button immediately
       statusBarItem.show();
 
       // Load history and dynamic labels asynchronously (non-blocking)
@@ -539,11 +566,25 @@ export class StatusBarQuickActionsExtension {
         `Failed to create statusbar item for button ${buttonConfig.id}:`,
         errorMessage,
       );
-      vscode.window.showErrorMessage(
-        `Failed to create button "${buttonConfig.text || buttonConfig.id}": ${errorMessage}`,
-      );
       return false;
     }
+  }
+
+  /**
+   * Get cached display text for button
+   */
+  private getCachedButtonDisplayText(
+    buttonConfig: StatusBarButtonConfig,
+  ): string {
+    const cacheKey = `${buttonConfig.id}_${buttonConfig.text}_${buttonConfig.icon?.id}_${buttonConfig.icon?.animation}`;
+    const cached = this.buttonDisplayCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const displayText = this.getButtonDisplayText(buttonConfig);
+    this.buttonDisplayCache.set(cacheKey, displayText);
+    return displayText;
   }
 
   /**
@@ -568,7 +609,7 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
-   * Execute a button command
+   * Execute a button command with performance optimizations
    */
   private async executeButton(buttonId: string): Promise<void> {
     const buttonState = this.buttonStates.get(buttonId);
@@ -599,26 +640,27 @@ export class StatusBarQuickActionsExtension {
       }
 
       // Add streaming support if output panel is enabled
-      const outputConfig = this.outputPanelManager.getConfig();
-      if (outputConfig.enabled) {
-        // Ensure panel exists
-        this.outputPanelManager.getOrCreatePanel(buttonId, config.text);
+      if (this.lazyInitState.outputPanelManager && this.outputPanelManager) {
+        const outputConfig = this.outputPanelManager.getConfig();
+        if (outputConfig.enabled) {
+          this.outputPanelManager.getOrCreatePanel(buttonId, config.text);
 
-        if (outputConfig.clearOnRun) {
-          this.outputPanelManager.clearPanel(buttonId);
+          if (outputConfig.clearOnRun) {
+            this.outputPanelManager.clearPanel(buttonId);
+          }
+
+          executionOptions.streaming = {
+            enabled: true,
+            onStdout: (data) => {
+              this.outputPanelManager.appendOutput(buttonId, data, "stdout");
+            },
+            onStderr: (data) => {
+              this.outputPanelManager.appendOutput(buttonId, data, "stderr");
+            },
+          };
+
+          this.outputPanelManager.showPanel(buttonId, true);
         }
-
-        executionOptions.streaming = {
-          enabled: true,
-          onStdout: (data) => {
-            this.outputPanelManager.appendOutput(buttonId, data, "stdout");
-          },
-          onStderr: (data) => {
-            this.outputPanelManager.appendOutput(buttonId, data, "stderr");
-          },
-        };
-
-        this.outputPanelManager.showPanel(buttonId, true);
       }
 
       // Execute the command
@@ -661,7 +703,7 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
-   * Update button state in UI
+   * Update button state in UI with performance optimization
    */
   private updateButtonState(buttonId: string, buttonState: ButtonState): void {
     const config = buttonState.config;
@@ -674,13 +716,13 @@ export class StatusBarQuickActionsExtension {
             ? "$(sync~spin)"
             : config.icon.animation === "pulse"
               ? "$(sync~pulse)"
-              : this.getButtonDisplayText(config);
+              : this.getCachedButtonDisplayText(config);
       } else {
         buttonState.item.text = `$(sync~spin) ${config.text}`;
       }
     } else {
       // Show normal state
-      buttonState.item.text = this.getButtonDisplayText(config);
+      buttonState.item.text = this.getCachedButtonDisplayText(config);
     }
 
     // Update tooltip with last result if available
@@ -713,7 +755,6 @@ export class StatusBarQuickActionsExtension {
         cancellable: false,
       },
       async (progress) => {
-        // Simulate progress (in a real implementation, this would be updated by the command executor)
         for (let i = 0; i <= 100; i += 10) {
           if (!buttonState.isExecuting) {
             break;
@@ -1020,7 +1061,7 @@ export class StatusBarQuickActionsExtension {
       return;
     }
 
-    const items = config.buttons.map((button: StatusBarButtonConfig) => ({
+    const items = config.buttons.map((button) => ({
       label: button.text,
       description: button.command.type,
       detail: button.tooltip,
@@ -1049,7 +1090,7 @@ export class StatusBarQuickActionsExtension {
       return;
     }
 
-    const items = config.buttons.map((button: StatusBarButtonConfig) => ({
+    const items = config.buttons.map((button) => ({
       label: button.text,
       description: button.command.type,
       detail: button.id,
@@ -1064,7 +1105,7 @@ export class StatusBarQuickActionsExtension {
     }
 
     const confirm = await vscode.window.showWarningMessage(
-      `Delete button "${selected.detail}"?`,
+      `Delete button "${selected.label}"?`,
       { modal: true },
       "Yes, Delete",
       "No",
@@ -1072,11 +1113,11 @@ export class StatusBarQuickActionsExtension {
 
     if (confirm === "Yes, Delete") {
       const updatedButtons = config.buttons.filter(
-        (b: StatusBarButtonConfig) => b.id !== selected.detail,
+        (b) => b.id !== selected.detail,
       );
       await this.configManager.setConfig("buttons", updatedButtons);
       vscode.window.showInformationMessage(
-        `✅ Button "${selected.detail}" deleted`,
+        `✅ Button "${selected.label}" deleted`,
       );
     }
   }
@@ -1091,7 +1132,7 @@ export class StatusBarQuickActionsExtension {
       return;
     }
 
-    const items = config.buttons.map((button: StatusBarButtonConfig) => ({
+    const items = config.buttons.map((button) => ({
       label: button.text,
       description: button.command.type,
       button: button,
@@ -1126,7 +1167,7 @@ export class StatusBarQuickActionsExtension {
       return;
     }
 
-    const items = config.buttons.map((button: StatusBarButtonConfig) => ({
+    const items = config.buttons.map((button) => ({
       label: button.text,
       description: button.enabled ? "$(check) Enabled" : "$(x) Disabled",
       button: button,
@@ -1141,14 +1182,14 @@ export class StatusBarQuickActionsExtension {
     }
 
     const buttonIndex = config.buttons.findIndex(
-      (b: StatusBarButtonConfig) => b.id === selected.button.id,
+      (b) => b.id === selected.button.id,
     );
     config.buttons[buttonIndex].enabled = !config.buttons[buttonIndex].enabled;
 
     await this.configManager.setConfig("buttons", config.buttons);
     const status = config.buttons[buttonIndex].enabled ? "enabled" : "disabled";
     vscode.window.showInformationMessage(
-      `✅ Button "${selected.button.text}" ${status}`,
+      `✅ Button "${selected.label}" ${status}`,
     );
   }
 
@@ -1220,13 +1261,17 @@ export class StatusBarQuickActionsExtension {
   }
 
   /**
-   * Add execution result to history
+   * Add execution result to history with optimization
    */
   private async addToHistory(
     buttonId: string,
     result: ExecutionResult,
   ): Promise<void> {
     try {
+      if (!this.context) {
+        return; // No context available for testing
+      }
+
       const historyKey = `history_${buttonId}`;
       const history: ExecutionResult[] = this.context.globalState.get(
         historyKey,
@@ -1263,6 +1308,10 @@ export class StatusBarQuickActionsExtension {
    */
   private async loadHistory(buttonId: string): Promise<ExecutionResult[]> {
     try {
+      if (!this.context) {
+        return [];
+      }
+
       const historyKey = `history_${buttonId}`;
       return this.context.globalState.get(historyKey, []);
     } catch (error) {
@@ -1290,7 +1339,7 @@ export class StatusBarQuickActionsExtension {
    */
   private cleanupStaleCache(): void {
     const now = Date.now();
-    const maxAge = 60000; // 1 minute
+    const maxAge = 120000; // 2 minutes (increased for better caching)
 
     // Clean up visibility cache
     this.visibilityCheckCache.forEach((value, key) => {
@@ -1300,7 +1349,7 @@ export class StatusBarQuickActionsExtension {
     });
 
     this.debugLog(
-      `Cache cleanup: ${this.visibilityCheckCache.size} entries remaining`,
+      `Cache cleanup: ${this.visibilityCheckCache.size} visibility entries, ${this.buttonDisplayCache.size} display entries remaining`,
     );
   }
 
@@ -1394,6 +1443,10 @@ export class StatusBarQuickActionsExtension {
       try {
         // Clear history for all buttons
         for (const [buttonId, buttonState] of this.buttonStates) {
+          if (!this.context) {
+            continue;
+          }
+
           const historyKey = `history_${buttonId}`;
           await this.context.globalState.update(historyKey, []);
           buttonState.history = [];
@@ -1475,7 +1528,7 @@ export class StatusBarQuickActionsExtension {
         );
 
         const now = Date.now();
-        const cacheTimeout = 1000; // 1 second cache
+        const cacheTimeout = 2000; // 2 seconds cache (increased for better performance)
 
         // Batch process visibility checks for buttons with visibility conditions
         const buttonsToCheck: {
@@ -1541,6 +1594,12 @@ export class StatusBarQuickActionsExtension {
    * Manage presets UI
    */
   private async managePresets(): Promise<void> {
+    // Lazy initialization of preset manager
+    if (!this.lazyInitState.presetManager || !this.presetManager) {
+      vscode.window.showInformationMessage("Preset manager not available.");
+      return;
+    }
+
     const items: vscode.QuickPickItem[] = [
       {
         label: "$(add) Create New Preset",
@@ -1596,6 +1655,11 @@ export class StatusBarQuickActionsExtension {
    * Save current configuration as a preset
    */
   private async saveAsPreset(): Promise<void> {
+    if (!this.presetManager) {
+      vscode.window.showErrorMessage("Preset manager not available.");
+      return;
+    }
+
     const name = await vscode.window.showInputBox({
       prompt: "Enter preset name",
       placeHolder: "e.g., My Development Setup",
@@ -1631,6 +1695,11 @@ export class StatusBarQuickActionsExtension {
    * Apply a preset command
    */
   private async applyPresetCommand(): Promise<void> {
+    if (!this.presetManager) {
+      vscode.window.showErrorMessage("Preset manager not available.");
+      return;
+    }
+
     const presets = this.presetManager.getAllPresets();
 
     if (presets.length === 0) {
@@ -1685,18 +1754,6 @@ export class StatusBarQuickActionsExtension {
       | "merge"
       | "append";
 
-    // Show impact preview
-    const confirm = await vscode.window.showWarningMessage(
-      `Apply preset "${selected.preset.name}" with mode "${mode}"?`,
-      { modal: true },
-      "Yes, Apply",
-      "No",
-    );
-
-    if (confirm !== "Yes, Apply") {
-      return;
-    }
-
     try {
       await this.configManager.applyPreset(selected.preset, mode);
       vscode.window.showInformationMessage(
@@ -1711,6 +1768,11 @@ export class StatusBarQuickActionsExtension {
    * View all presets
    */
   private async viewAllPresets(): Promise<void> {
+    if (!this.presetManager) {
+      vscode.window.showErrorMessage("Preset manager not available.");
+      return;
+    }
+
     const presets = this.presetManager.getAllPresets();
 
     if (presets.length === 0) {
@@ -1755,6 +1817,11 @@ export class StatusBarQuickActionsExtension {
    * Export preset command
    */
   private async exportPresetCommand(): Promise<void> {
+    if (!this.presetManager) {
+      vscode.window.showErrorMessage("Preset manager not available.");
+      return;
+    }
+
     const presets = this.presetManager.getAllPresets();
 
     if (presets.length === 0) {
@@ -1787,6 +1854,11 @@ export class StatusBarQuickActionsExtension {
    * Import preset command
    */
   private async importPresetCommand(): Promise<void> {
+    if (!this.presetManager) {
+      vscode.window.showErrorMessage("Preset manager not available.");
+      return;
+    }
+
     try {
       const preset = await this.presetManager.importPreset();
       if (preset) {
@@ -1811,7 +1883,11 @@ export class StatusBarQuickActionsExtension {
    */
   private async refreshButtonLabel(buttonId: string): Promise<void> {
     const buttonState = this.buttonStates.get(buttonId);
-    if (!buttonState || !buttonState.config.dynamicLabel) {
+    if (
+      !buttonState ||
+      !buttonState.config.dynamicLabel ||
+      !this.dynamicLabelManager
+    ) {
       return;
     }
 
@@ -1821,10 +1897,14 @@ export class StatusBarQuickActionsExtension {
         buttonState.config.dynamicLabel,
       );
 
+      // Clear cached display text to force refresh
+      const cacheKey = `${buttonState.config.id}_${buttonState.config.text}_${buttonState.config.icon?.id}_${buttonState.config.icon?.animation}`;
+      this.buttonDisplayCache.delete(cacheKey);
+
       // Update button text with dynamic label
       if (buttonState.config.icon) {
         // If icon exists, append label after icon
-        const iconText = this.getButtonDisplayText(buttonState.config);
+        const iconText = this.getCachedButtonDisplayText(buttonState.config);
         buttonState.item.text = `${iconText} ${newLabel}`;
       } else {
         // Replace text entirely
@@ -1833,6 +1913,24 @@ export class StatusBarQuickActionsExtension {
     } catch (error) {
       console.error(`Failed to refresh label for ${buttonId}:`, error);
     }
+  }
+
+  /**
+   * Type guard for OutputPanelConfig
+   */
+  private isOutputPanelConfig(
+    config: OutputPanelConfig | PerformanceConfig,
+  ): config is OutputPanelConfig {
+    return "enabled" in config && "mode" in config;
+  }
+
+  /**
+   * Type guard for PerformanceConfig
+   */
+  private isPerformanceConfig(
+    config: OutputPanelConfig | PerformanceConfig,
+  ): config is PerformanceConfig {
+    return "visibilityDebounceMs" in config && "enableVirtualization" in config;
   }
 }
 

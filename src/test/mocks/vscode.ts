@@ -72,6 +72,11 @@ export class MockExtensionContext {
   public asAbsolutePath(relativePath: string): string {
     return `/mock/extension/path/${relativePath}`;
   }
+
+  dispose(): void {
+    this.subscriptions.forEach((sub) => sub.dispose());
+    this.subscriptions = [];
+  }
 }
 
 /**
@@ -96,6 +101,10 @@ export class MockMemento {
 
   clear(): void {
     this.storage.clear();
+  }
+
+  setKeysForSync(_keys: readonly string[]): void {
+    // Mock implementation - no-op
   }
 }
 
@@ -511,6 +520,20 @@ export const vscode = {
     }
   },
 };
+
+/**
+ * Mock GitApi
+ */
+export interface GitApi {
+  repositories: {
+    state: {
+      HEAD: { name: string };
+      workingTreeChanges: any[];
+      indexChanges: any[];
+      mergeChanges: any[];
+    };
+  }[];
+}
 
 /**
  * Export types for testing

@@ -548,3 +548,12 @@ export interface SystemInfo {
     count: number;
   };
 }
+
+/**
+ * Git API interface for VS Code Git extension
+ */
+export interface GitApi {
+  git: {
+    exec: (args: string[]) => Promise<{ stdout: string; stderr: string }>;
+  };
+}

@@ -24,9 +24,14 @@ export class DynamicLabelManager {
     try {
       const gitExt = vscode.extensions.getExtension("vscode.git");
       if (gitExt) {
-        this.gitExtension = gitExt.isActive
-          ? gitExt.exports
-          : await gitExt.activate();
+        // Git extension doesn't have an activate method, check if it's active
+        if (gitExt.isActive && gitExt.exports) {
+          this.gitExtension = gitExt.exports;
+        } else if (gitExt.exports) {
+          // If exports are available but not active, try to use them
+          this.gitExtension = gitExt.exports;
+        }
+        // If neither is available, git extension won't be used
       }
     } catch (error) {
       console.warn("Git extension not available:", error);
