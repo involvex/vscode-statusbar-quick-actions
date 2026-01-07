@@ -2,7 +2,7 @@
   "name": "statusbar-quick-actions",
   "displayName": "StatusBar Quick Actions",
   "description": "Highly customizable statusbar buttons for executing user-defined scripts and commands with advanced features including theme support, execution tracking, and intelligent visibility conditions.",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "publisher": "involvex",
   "author": {
     "name": "involvex"
@@ -566,9 +566,9 @@
     "@types/console-clear": "^1.1.4",
     "@types/mocha": "^10.0.10",
     "@types/node": "^25.0.3",
-    "@types/sinon": "^17.0.3",
+    "@types/sinon": "^21.0.0",
     "@types/vscode": "^1.107.0",
-    "@vscode/test-electron": "^2.4.1",
+    "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.7.1",
     "benchmark": "^2.1.4",
     "eslint": "^9.39.2",
@@ -576,9 +576,9 @@
     "perf_hooks": "^0.0.1",
     "prettier": "^3.7.4",
     "rimraf": "^6.1.2",
-    "sinon": "^19.0.2",
+    "sinon": "19.0.5",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.50.1"
+    "typescript-eslint": "^8.52.0"
   },
   "extensionDependencies": [],
   "badges": [
